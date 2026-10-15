@@ -2,8 +2,18 @@
 // URLs are relative ("api/..."), so the app also works under a subpath on
 // Shiny Server or Posit Connect.
 
+// The API only answers open pages of this app: every request carries this
+// tab's Shiny session token in the X-Spigot-Session header. Shiny sets the
+// token just before it fires "shiny:sessioninitialized".
+const sessionId = new Promise((resolve) => {
+  const id = () => window.Shiny && Shiny.shinyapp && Shiny.shinyapp.config &&
+    Shiny.shinyapp.config.sessionId;
+  if (id()) return resolve(id());
+  jQuery(document).on("shiny:sessioninitialized", () => resolve(id()));
+});
+
 async function api(method, path, body) {
-  const opts = { method, headers: {} };
+  const opts = { method, headers: { "X-Spigot-Session": await sessionId } };
   if (body !== undefined) {
     opts.headers["Content-Type"] = "application/json";
     opts.body = typeof body === "string" ? body : JSON.stringify(body);

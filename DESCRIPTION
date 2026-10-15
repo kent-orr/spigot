@@ -21,10 +21,12 @@ Imports:
     shiny (>= 1.14.0)
 Suggests: 
     callr,
+    chromote,
     curl,
     future,
     httr2,
     pkgload,
     testthat (>= 3.0.0),
+    websocket,
     withr
 Config/testthat/edition: 3

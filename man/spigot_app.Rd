@@ -4,7 +4,14 @@
 \alias{spigot_app}
 \title{Create a Shiny app with a plumber API mounted inside it}
 \usage{
-spigot_app(ui, server = NULL, api, prefix = "/api")
+spigot_app(
+  ui,
+  server = NULL,
+  api,
+  prefix = "/api",
+  require_session = TRUE,
+  max_request_size = NULL
+)
 }
 \arguments{
 \item{ui}{The Shiny UI, as for \code{\link[shiny:shinyApp]{shiny::shinyApp()}}. (Temporary: a later
@@ -17,6 +24,15 @@ with \code{\link[=spigot_api]{spigot_api()}}; a router is used as given, so buil
 \code{spigot_api()} to get \code{\link[=spigot_json]{spigot_json()}} responses.}
 
 \item{prefix}{URL path the API is mounted under.}
+
+\item{require_session}{If \code{TRUE}, API requests must carry the token of a
+live session of this app. If \code{FALSE}, requests without one still reach
+the endpoint, where \code{\link[=spigot_session]{spigot_session()}} returns \code{NULL}.}
+
+\item{max_request_size}{Largest request body in bytes, applied as
+\code{options(shiny.maxRequestSize)} while the app runs (it also limits
+\code{\link[shiny:fileInput]{shiny::fileInput()}} uploads). \code{Inf} removes the limit. \code{NULL} leaves the
+option as it is.}
 }
 \value{
 A \code{shiny.appobj}.
@@ -25,6 +41,31 @@ A \code{shiny.appobj}.
 The API is served by the same process, origin and port as the app, under
 \code{prefix}. Every other path is handled by Shiny as usual.
 }
+\section{Sessions}{
+
+Each browser tab is a Shiny session. Its page sends the session token
+(\code{Shiny.shinyapp.config.sessionId}, available once the
+\code{shiny:sessioninitialized} event has fired) in an \code{X-Spigot-Session}
+header, and spigot binds the request to that session; endpoints read it with
+\code{\link[=spigot_session]{spigot_session()}}. A token stops working as soon as its session ends.
+
+With \code{require_session = TRUE}, API requests without a live session's token
+get a \code{401} JSON response, \code{{"error": "session required"}}, so only open
+pages of this app can call the API.
+
+API requests whose \code{Origin} header (or, without one, \code{Referer}) names
+another host than the request's \code{Host} (or \code{X-Forwarded-Host}) get a \code{403}
+JSON response, whatever \code{require_session} is.
+}
+
+\section{Request size}{
+
+Shiny rejects request bodies larger than \code{getOption("shiny.maxRequestSize")}
+(5 MB by default) before any R handler runs. That response is Shiny's own:
+status \code{413} with the \strong{plain-text} body \verb{Maximum upload size exceeded},
+not JSON. Clients should not assume every error body is JSON.
+}
+
 \examples{
 \dontrun{
 api <- spigot_api() |> plumber::pr_get("/hello", function() list(msg = "hi"))

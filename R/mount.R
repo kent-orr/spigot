@@ -88,12 +88,20 @@ mount_app <- function(app, pr, prefix = "/api", guard = NULL) {
   # answers non-GET requests under it with 400 itself, before R sees them. The
   # httpuv server only exists after onStart, so exclude the prefix on the first
   # event-loop tick, which runs before any request is handled in R.
-  user_on_start <- app$onStart
-  app$onStart <- function() {
-    if (is.function(user_on_start)) user_on_start()
+  app_on_start(app, function() {
     later::later(function() {
       exclude_static_prefix(shiny::getShinyOption("server", default = NULL), prefix)
     })
+  })
+}
+
+# Run `fn` when the app starts, after the app's own onStart.
+app_on_start <- function(app, fn) {
+  force(fn)
+  user_on_start <- app$onStart
+  app$onStart <- function() {
+    if (is.function(user_on_start)) user_on_start()
+    fn()
   }
   app
 }
@@ -104,4 +112,71 @@ exclude_static_prefix <- function(server, prefix) {
   if (is.null(server)) return(FALSE)
   server$setStaticPath(.list = stats::setNames(list(httpuv::excludeStaticPath()), prefix))
   TRUE
+}
+
+# ---- request guards (PLAN 4.2) -------------------------------------------------
+# A guard is function(req) returning NULL to let the request through, or an
+# httpResponse to answer it without calling the router. Guards run after the
+# prefix is stripped and only for API requests.
+
+SPIGOT_HEADER <- "HTTP_X_SPIGOT_SESSION"
+
+# The guard spigot_app() installs: origin first, then session.
+request_guard <- function(require_session = TRUE) {
+  if (!is_flag(require_session)) {
+    stop("`require_session` must be TRUE or FALSE.", call. = FALSE)
+  }
+  guards <- list(origin_guard(), session_guard(require_session))
+  function(req) {
+    for (g in guards) {
+      denied <- g(req)
+      if (!is.null(denied)) return(denied)
+    }
+    NULL
+  }
+}
+
+# Binds the request to the live session named by its X-Spigot-Session header
+# (req$spigot_session, read by spigot_session()). With require_session, a
+# request without one gets 401. Malformed tokens never reach the registry.
+session_guard <- function(require_session = TRUE) {
+  force(require_session)
+  function(req) {
+    token <- req[[SPIGOT_HEADER]]
+    session <- if (is_token(token)) lookup_session(token)
+    if (is.null(session)) {
+      if (require_session) return(json_error(401L, "session required"))
+      return(NULL)
+    }
+    req$spigot_session <- session
+    NULL
+  }
+}
+
+# Refuses requests whose Origin (or, without one, Referer) names another host
+# than the one the request was sent to. Browsers send Origin on same-origin
+# POST/PUT/DELETE and nothing on same-origin GET, so absent means allowed.
+# Behind a proxy that rewrites Host, X-Forwarded-Host also counts.
+origin_guard <- function() {
+  function(req) {
+    source <- req$HTTP_ORIGIN %||% req$HTTP_REFERER
+    if (is.null(source)) return(NULL)
+    if (same_origin(source, req)) NULL else json_error(403L, "cross-origin request refused")
+  }
+}
+
+same_origin <- function(source, req) {
+  m <- regmatches(source, regexec("^([A-Za-z][A-Za-z0-9+.-]*)://([^/?#@]*)([/?#]|$)", source))[[1]]
+  if (!length(m)) return(FALSE) # "null", relative, userinfo, or not a URL
+  scheme <- tolower(m[2])
+  origin <- strip_default_port(tolower(m[3]), scheme)
+  hosts <- c(req$HTTP_HOST, strsplit(req$HTTP_X_FORWARDED_HOST %||% "", ",", fixed = TRUE)[[1]])
+  hosts <- strip_default_port(tolower(trimws(hosts)), scheme)
+  nzchar(origin) && origin %in% hosts[nzchar(hosts)]
+}
+
+strip_default_port <- function(authority, scheme) {
+  port <- switch(scheme, http = ":80", https = ":443", NULL)
+  if (is.null(port)) return(authority)
+  sub(paste0(port, "$"), "", authority)
 }

@@ -162,3 +162,70 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   message goes to stderr via `message()` and never to the client.
 - Prefix rule: `^(/[A-Za-z0-9._~-]+)+$`. The first segment must not be `session` or `shared`
   (Shiny serves both itself).
+
+## 2026-10-15 — M2: integration tests open Shiny sessions without a browser
+
+- `open_session(url)` (`helper-server.R`) connects a `websocket::WebSocket` to
+  `/websocket/` and sends `{"method":"init","data":{}}`. Shiny answers
+  `{"config":{"workerId":"","sessionId":"<token>","user":null}}` on connect, runs the
+  server function after `init`, and then flushes `{"errors":{},"values":{},...}`. The helper waits for
+  that flush, so the session is registered before the first API call. Closing the
+  socket fires `onSessionEnded` (scratch check: START/END both logged).
+- So session integration tests (401/200, token dies with the session, 413) need no Chrome.
+  Chrome is only used for what needs a real browser: the `Origin` header a browser POST
+  sends, and closing a tab. `websocket` (already a chromote dependency) and `chromote` are
+  in Suggests.
+- `helper-chrome.R` does not download. It uses a browser on the PATH, else the cached
+  Chrome for Testing headless shell (`chromote::chrome_versions_list("installed")`). It
+  skips with the install command when neither exists.
+
+## 2026-10-15 — M2: session registry and server wrapper
+
+- One process-global registry (`.registry`, token → session). A token from another spigot
+  app **in the same R process** would be accepted by this app's API. Deployed apps run one
+  app per process (Shiny Server, Connect, `runApp`), so this is accepted for now. Revisit
+  if `spigot_broadcast()` (M4) needs per-app scope.
+- `register_session()` is idempotent: a second call for the same session adds no second
+  `onSessionEnded` callback. Removal only deletes the entry if it is still that session.
+- `lookup_session()` also treats `session$isClosed()` as gone. This covers any gap between the
+  socket closing and `onSessionEnded` running.
+- `wrap_server()` always has formals `(input, output, session)` and calls the user's function
+  with the arguments Shiny would give it. It mirrors `shiny:::argsForServerFunc()`: `session` and
+  `clientData` only when named in its formals; `...` does not receive them. **F20.**
+
+## 2026-10-15 — M2: origin guard rules
+
+- `Origin` is used when present, else `Referer`. With neither, the request passes (same-origin GET).
+- The source's `scheme://authority` is compared, case-insensitively, with `Host` and with
+  every entry of `X-Forwarded-Host` (comma-separated). `:80` is dropped for http and `:443`
+  for https on both sides. `Origin: null`, userinfo (`user@host`), non-URLs, and a source with
+  no `Host` to compare against → 403.
+- Accepting `X-Forwarded-Host` does not weaken the guard. A cross-site page cannot set that
+  header without a CORS preflight, and the API never answers a preflight with CORS headers.
+  Likewise, a cross-site `fetch` cannot send `X-Spigot-Session` without a preflight. So with
+  `require_session = TRUE` the session check alone already blocks CSRF, and the origin guard
+  is defence in depth. With `require_session = FALSE` it is the only CSRF guard.
+- **Not verified here (no deployment on this machine):** whether Shiny Server and Posit Connect
+  keep `Host` or set `X-Forwarded-Host`. If a proxy rewrites `Host` and sets neither, every browser
+  POST gets 403. Check this on a real deployment before M7. PLAN §7 Q6 (`allow_origins`) is the escape hatch.
+- The origin check runs before the session check: a cross-origin request gets 403 even with a valid token.
+
+## 2026-10-15 — M2: `max_request_size` defaults to `NULL` (changes PLAN §3)
+
+- PLAN §3 had `max_request_size = 5 * 1024^2`. That would silently override an
+  `options(shiny.maxRequestSize = ...)` the user set themselves. **Decision:** default `NULL`
+  leaves the option alone (Shiny's own default is 5 MB). A number sets it in `onStart`.
+  `shiny::onStop()` (registered inside `onStart`, so it is app-level) restores the old value.
+  `Inf` means no limit. Values `<= 0` are rejected, though Shiny would read them as unlimited.
+- Shiny's httpuv `onHeaders` reads the option **per request**, so setting it in `onStart`
+  works. A body with `Transfer-Encoding` and no `Content-Length` counts as size `Inf`, so it
+  **always** gets 413 while any finite limit is set. **F19.**
+- The 413 body is Shiny's plain text (`Maximum upload size exceeded`). This is documented in the
+  `spigot_app()` "Request size" section, which is the draft for the vignette note.
+
+## 2026-10-15 — M2: the minimal example sends the token itself until M3
+
+- `require_session = TRUE` is the default, so `inst/examples/minimal/www/app.js` now waits for
+  `shiny:sessioninitialized` and sends `X-Spigot-Session`. `spigot.js` (M3) will replace this.
+- Gotcha caught by the e2e test: the script's own `const $ = (id) => ...` shadows jQuery's `$`
+  across the whole script (temporal dead zone). Use `jQuery(document)` explicitly.

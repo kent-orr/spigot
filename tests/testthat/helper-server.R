@@ -62,3 +62,42 @@ hit_text <- function(resp) {
   if (!httr2::resp_has_body(resp)) return("")
   httr2::resp_body_string(resp)
 }
+
+# Open a Shiny session over the websocket, as a browser tab would, without a
+# browser. Returns the session token and a close() that ends the session.
+# Waits for the first flush after init, so the server function has run.
+open_session <- function(url, timeout = 10, env = parent.frame()) {
+  testthat::skip_if_not_installed("websocket")
+  msgs <- character()
+  ws <- websocket::WebSocket$new(paste0(sub("^http", "ws", url), "/websocket/"),
+                                 autoConnect = FALSE)
+  ws$onOpen(function(event) ws$send('{"method":"init","data":{}}'))
+  ws$onMessage(function(event) msgs <<- c(msgs, event$data))
+  ws$connect()
+
+  close <- function() {
+    if (ws$readyState() < 2L) ws$close()
+    deadline <- Sys.time() + timeout
+    while (ws$readyState() != 3L && Sys.time() < deadline) later::run_now(0.05)
+    invisible()
+  }
+  withr::defer(close(), envir = env)
+
+  deadline <- Sys.time() + timeout
+  while (!any(grepl('"values"', msgs, fixed = TRUE))) {
+    if (Sys.time() > deadline) stop("Shiny session did not start within ", timeout, " s")
+    later::run_now(0.05)
+  }
+  config <- Filter(function(m) grepl('"config"', m, fixed = TRUE), msgs)[[1]]
+  list(token = jsonlite::fromJSON(config)$config$sessionId, close = close)
+}
+
+# Poll `f()` until it is TRUE or `timeout` seconds pass; returns the last value.
+eventually <- function(f, timeout = 1, interval = 0.05) {
+  deadline <- Sys.time() + timeout
+  repeat {
+    ok <- isTRUE(f())
+    if (ok || Sys.time() > deadline) return(ok)
+    Sys.sleep(interval)
+  }
+}

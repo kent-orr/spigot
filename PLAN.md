@@ -9,6 +9,8 @@
 > M0 complete (2026-10-15): all spikes recorded in DECISIONS.md; stale facts above corrected.
 >
 > M1 complete (2026-10-15): F16–F18 added; `spigot_api()` signature changed (DECISIONS.md).
+>
+> M2 complete (2026-10-15): F19–F20 added; `max_request_size` now defaults to `NULL` (DECISIONS.md).
 
 ## 1. Goal
 
@@ -58,7 +60,7 @@ spigot_app(
   api,                   # plumber router or path to plumber file(s)
   prefix = "/api",
   require_session = TRUE,# reject API calls without a live session token
-  max_request_size = 5 * 1024^2  # forwarded to options(shiny.maxRequestSize)
+  max_request_size = NULL        # bytes -> options(shiny.maxRequestSize); NULL leaves it alone
 )
 
 spigot_api(file = NULL, envir = parent.frame())  # plumber::pr() with spigot_json() as default serializer
@@ -122,6 +124,8 @@ These were read from source, not assumed. Re-verify when bumping either dependen
 | F16 | `shinyAppDir()` serves `www/` as an httpuv static path at `/`; httpuv answers non-GET requests under it with 400 before R runs. Static paths come from the *outer* appobj. | `mount_app()` adds `excludeStaticPath()` for the prefix via `getShinyOption("server")$setStaticPath()` on the first loop tick after `onStart` (DECISIONS.md M1). |
 | F17 | plumber copies the router's default serializer into each endpoint at creation; file endpoints without `@serializer` resolve it per request. | `spigot_api()` with no file returns a router that already has the serializer; a `Plumber` passed in is left unchanged. |
 | F18 | httpuv sets both `CONTENT_TYPE` and `HTTP_CONTENT_TYPE` (plumber reads the latter), plus `HEADERS`. | `fake_req()` mirrors this. |
+| F19 | Shiny's `onHeaders` reads `shiny.maxRequestSize` per request; a body without `Content-Length` but with `Transfer-Encoding` counts as `Inf`. | Setting the option in `onStart` works; chunked uploads always get 413 under a finite limit. |
+| F20 | `argsForServerFunc()` passes `session` (and `clientData`) only when named in the server's formals. | `wrap_server()` always takes `session` and mirrors this rule for the user's function. |
 
 Environment on this dev machine: R 4.5.2, shiny 1.14.0, whisker 0.4.1, htmltools 0.5.9,
 jsonlite 2.0.0, promises 1.5.0, httr2 1.3.0, callr 3.8.0, testthat 3.3.2, later 1.4.8,
@@ -142,7 +146,8 @@ future 1.70.0, httpuv 1.6.17, plumber 1.3.3, chromote 0.5.1 + Chrome for Testing
 - The mount handler validates the header (hex), looks up the session, and sets `req$spigot_session` before `pr$call()`.
 - `require_session = TRUE`: missing or unknown token → 401 JSON. Only live pages of this app can call the API.
 - Cross-origin guard: if `Origin` (or `Referer` when `Origin` absent) is present and its host:port differs from `Host` → 403 JSON. Same-origin `fetch` always sends `Origin` on POST, and sends nothing on same-origin GET, so "absent" is allowed.
-- Body size: forward `max_request_size` to `options(shiny.maxRequestSize)` (F5). Shiny answers 413 itself.
+- Cross-origin guard also accepts `X-Forwarded-Host` (proxies that rewrite `Host`) and normalises default ports (DECISIONS.md M2).
+- Body size: forward `max_request_size` to `options(shiny.maxRequestSize)` (F5, F19). Shiny answers 413 itself.
 
 ### 4.3 Pages and templates (whisker)
 

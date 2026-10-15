@@ -25,4 +25,6 @@ api <- spigot::spigot_api() |>
     })
   })
 
-spigot::spigot_app(ui = fluidPage(tags$p("spigot-mount-fixture")), api = api)
+# This fixture tests the mount, not sessions: calls come from R without a token.
+spigot::spigot_app(ui = fluidPage(tags$p("spigot-mount-fixture")), api = api,
+                  require_session = FALSE)
