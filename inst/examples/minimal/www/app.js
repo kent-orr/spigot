@@ -1,39 +1,34 @@
-// The page's only script: plain fetch() against the mounted API.
-// URLs are relative ("api/..."), so the app also works under a subpath on
-// Shiny Server or Posit Connect.
+// The page's only script. It calls the mounted API with spigot.js, which
+// spigot_app() adds to every page: spigot.get() and spigot.post() take paths
+// relative to the API ("hello" means api/hello, relative to this page, so the
+// app also works under a subpath on Shiny Server or Posit Connect), send this
+// tab's Shiny session token, and wait for the session if it has not started.
+// They resolve with the parsed JSON reply and reject with a SpigotError
+// ({status, message, body}) for any non-2xx reply.
 
-// The API only answers open pages of this app: every request carries this
-// tab's Shiny session token in the X-Spigot-Session header. Shiny sets the
-// token just before it fires "shiny:sessioninitialized".
-const sessionId = new Promise((resolve) => {
-  const id = () => window.Shiny && Shiny.shinyapp && Shiny.shinyapp.config &&
-    Shiny.shinyapp.config.sessionId;
-  if (id()) return resolve(id());
-  jQuery(document).on("shiny:sessioninitialized", () => resolve(id()));
-});
-
-async function api(method, path, body) {
-  const opts = { method, headers: { "X-Spigot-Session": await sessionId } };
-  if (body !== undefined) {
-    opts.headers["Content-Type"] = "application/json";
-    opts.body = typeof body === "string" ? body : JSON.stringify(body);
-  }
+// Run one call and describe the outcome for show().
+async function call(label, promise) {
   const t0 = performance.now();
-  const res = await fetch("api/" + path, opts);
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch (e) { data = text; }
-  return { method, path, status: res.status, ms: Math.round(performance.now() - t0), data };
+  const ms = () => Math.round(performance.now() - t0);
+  try {
+    const data = await promise;
+    return { label, ok: true, outcome: "OK", ms: ms(), data };
+  } catch (err) {
+    if (!(err instanceof spigot.SpigotError)) throw err;
+    // status 0 means no reply: a timeout or a network failure.
+    const outcome = err.status ? String(err.status) : "no reply";
+    return { label, ok: false, outcome, ms: ms(), data: err.body ?? err.message };
+  }
 }
 
 function show(el, r) {
-  el.textContent = `${r.method} api/${r.path}  →  ${r.status}  (${r.ms} ms)\n\n` +
+  el.textContent = `${r.label}  →  ${r.outcome}  (${r.ms} ms)\n\n` +
     (typeof r.data === "string" ? r.data : JSON.stringify(r.data, null, 2));
-  el.classList.toggle("err", r.status >= 400);
+  el.classList.toggle("err", !r.ok);
 }
 
 function showError(el, err) {
-  el.textContent = "Request failed: " + err.message;
+  el.textContent = err.message;
   el.classList.add("err");
 }
 
@@ -41,9 +36,8 @@ const $ = (id) => document.getElementById(id);
 
 $("hello-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const name = encodeURIComponent($("hello-name").value);
-  try { show($("hello-out"), await api("GET", "hello?name=" + name)); }
-  catch (err) { showError($("hello-out"), err); }
+  const name = $("hello-name").value;
+  show($("hello-out"), await call("GET api/hello", spigot.get("hello", { name })));
 });
 
 $("echo-form").addEventListener("submit", async (e) => {
@@ -52,15 +46,13 @@ $("echo-form").addEventListener("submit", async (e) => {
   let body;
   try { body = JSON.parse($("echo-body").value); }
   catch (err) { showError(out, new Error("the box does not hold valid JSON")); return; }
-  try { show(out, await api("POST", "echo", body)); }
-  catch (err) { showError(out, err); }
+  show(out, await call("POST api/echo", spigot.post("echo", body)));
 });
 
 $("summary-form").addEventListener("submit", async (e) => {
   e.preventDefault();
-  const n = encodeURIComponent($("summary-n").value);
-  try { show($("summary-out"), await api("GET", "summary?n=" + n)); }
-  catch (err) { showError($("summary-out"), err); }
+  const n = $("summary-n").value;
+  show($("summary-out"), await call("GET api/summary", spigot.get("summary", { n })));
 });
 
 // The async demo appends to a running log.
@@ -73,15 +65,11 @@ function logLine(line) {
 
 $("slow-btn").addEventListener("click", async () => {
   logLine("slow: sent, waiting 3 s ...");
-  try {
-    const r = await api("GET", "slow?seconds=3");
-    logLine(`slow: ${r.status} after ${r.ms} ms`);
-  } catch (err) { logLine("slow: failed: " + err.message); }
+  const r = await call("slow", spigot.get("slow", { seconds: 3 }));
+  logLine(`slow: ${r.outcome} after ${r.ms} ms`);
 });
 
 $("ping-btn").addEventListener("click", async () => {
-  try {
-    const r = await api("GET", "hello?name=ping");
-    logLine(`ping: ${r.status} after ${r.ms} ms`);
-  } catch (err) { logLine("ping: failed: " + err.message); }
+  const r = await call("ping", spigot.get("hello", { name: "ping" }));
+  logLine(`ping: ${r.outcome} after ${r.ms} ms`);
 });

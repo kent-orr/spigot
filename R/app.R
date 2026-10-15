@@ -18,6 +18,12 @@
 #' another host than the request's `Host` (or `X-Forwarded-Host`) get a `403`
 #' JSON response, whatever `require_session` is.
 #'
+#' @section The browser client:
+#' Every page gets `spigot.js` (see [spigot_dependency()]), which defines
+#' `spigot.get()`, `spigot.post()` and friends. They send the session token
+#' for you, so a page's own code calls the API with
+#' `await spigot.get("items", {page: 2})`.
+#'
 #' @section Request size:
 #' Shiny rejects request bodies larger than `getOption("shiny.maxRequestSize")`
 #' (5 MB by default) before any R handler runs. That response is Shiny's own:
@@ -52,6 +58,7 @@ spigot_app <- function(ui, server = NULL, api, prefix = "/api",
   guard <- request_guard(require_session)
   check_max_request_size(max_request_size)
 
+  ui <- attach_spigot(ui, spigot_dependency(prefix))
   app <- shiny::shinyApp(ui = ui, server = wrap_server(server))
   app <- mount_app(app, spigot_api(api, envir = parent.frame()), prefix = prefix,
                    guard = guard)

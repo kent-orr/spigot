@@ -13,12 +13,14 @@ RoxygenNote: 7.3.3
 Depends: 
     R (>= 4.1.0)
 Imports: 
+    htmltools,
     httpuv,
     jsonlite,
     later,
     plumber (>= 1.0.0),
     promises,
-    shiny (>= 1.14.0)
+    shiny (>= 1.14.0),
+    utils
 Suggests: 
     callr,
     chromote,

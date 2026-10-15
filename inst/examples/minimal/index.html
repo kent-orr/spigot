@@ -15,10 +15,11 @@
         This page is plain HTML and JavaScript. Every button calls a
         <a href="https://www.rplumber.io/">plumber</a> endpoint that runs
         <strong>inside this Shiny app</strong>, on the same origin and port,
-        under <code>/api</code>. The calls are ordinary <code>fetch()</code>
-        requests to relative URLs that carry this tab's Shiny session token,
-        so only open pages of this app can call the API; see
-        <code>www/app.js</code> and <code>api.R</code>.
+        under <code>/api</code>. The page calls it with <code>spigot.get()</code>
+        and <code>spigot.post()</code> from <code>spigot.js</code>, which
+        spigot adds to the page. They use relative URLs and send this tab's
+        Shiny session token, so only open pages of this app can call the API;
+        see <code>www/app.js</code> and <code>api.R</code>.
       </p>
     </header>
 

@@ -28,10 +28,13 @@ smoke <- list(
     expect_identical(httr2::resp_status(r), 200L)
     expect_gte(as.numeric(Sys.time() - t0, units = "secs"), 0.5)
 
+    # The page uses spigot.js, not hand-rolled fetch() calls.
     r <- hit(paste0(u, "/app.js"))
     expect_identical(httr2::resp_status(r), 200L)
-    expect_match(hit_text(r), "fetch(\"api/\"", fixed = TRUE)
-    expect_match(hit_text(r), "X-Spigot-Session", fixed = TRUE)
+    expect_match(hit_text(r), "spigot.get(", fixed = TRUE)
+    expect_match(hit_text(r), "spigot.post(", fixed = TRUE)
+    expect_no_match(hit_text(r), "fetch(", fixed = TRUE)
+    expect_no_match(hit_text(r), "X-Spigot-Session", fixed = TRUE)
 
     expect_identical(httr2::resp_status(hit(paste0(u, "/api/hello"))), 401L)
   }
@@ -49,6 +52,7 @@ for (name in names(smoke)) {
     expect_identical(httr2::resp_status(r), 200L)
     page <- hit_text(r)
     expect_match(page, "app.js", fixed = TRUE)
+    expect_match(page, "spigot.js", fixed = TRUE)
     expect_match(page, "shiny", fixed = TRUE)
     sess <- open_session(srv$url)
     smoke[[name]](srv$url, list(`X-Spigot-Session` = sess$token))
@@ -59,9 +63,22 @@ test_that("the minimal example's page calls its API from a browser", {
   skip_if_no_chrome()
   srv <- start_app(example_dir("minimal"))
   tab <- new_tab(srv$url)
-  # api() is the page's own helper in www/app.js.
-  r <- js(tab, 'api("GET", "hello?name=tab").then(r => ({status: r.status, msg: r.data.message}))')
-  expect_identical(r, list(status = 200L, msg = "Hello, tab!"))
-  r <- js(tab, 'api("POST", "echo", {k: 1}).then(r => r.status)')
-  expect_identical(r, 200L)
+  # Drive the page's own buttons and read what it shows.
+  click_and_read <- function(form, out) {
+    js(tab, sprintf('document.getElementById("%s").textContent = ""; true', out))
+    js(tab, sprintf('document.querySelector("#%s button").click(); true', form))
+    deadline <- Sys.time() + 5
+    repeat {
+      txt <- js(tab, sprintf('document.getElementById("%s").textContent', out))
+      if (nzchar(txt) || Sys.time() > deadline) return(txt)
+      Sys.sleep(0.05)
+    }
+  }
+  js(tab, 'document.getElementById("hello-name").value = "tab"; true')
+  expect_match(click_and_read("hello-form", "hello-out"), "OK[\\s\\S]*Hello, tab!", perl = TRUE)
+  expect_match(click_and_read("echo-form", "echo-out"), "OK[\\s\\S]*RKS0420", perl = TRUE)
+  js(tab, 'document.getElementById("summary-n").value = "0"; true')
+  out <- click_and_read("summary-form", "summary-out")
+  expect_match(out, "400[\\s\\S]*n must be a whole number", perl = TRUE)
+  expect_true(js(tab, 'document.getElementById("summary-out").classList.contains("err")'))
 })

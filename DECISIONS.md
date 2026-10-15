@@ -229,3 +229,62 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   `shiny:sessioninitialized` and sends `X-Spigot-Session`. `spigot.js` (M3) will replace this.
 - Gotcha caught by the e2e test: the script's own `const $ = (id) => ...` shadows jQuery's `$`
   across the whole script (temporal dead zone). Use `jQuery(document)` explicitly.
+
+## 2026-10-15 — M3: how spigot.js learns the prefix (changes PLAN M3 step 10)
+
+- PLAN had `spigot_dependency()` set `window.__spigot = {prefix}` with the dependency's `head`
+  field. htmltools' `renderDependencies()` writes `head` **after** the dependency's `<script>`,
+  so the global would not exist yet when `spigot.js` runs.
+- **Decision:** the script tag carries it, `<script src=".../spigot.js" data-prefix="/api">`
+  (`script = list(src, data-prefix)`; htmltools ≥ 0.5 renders attribute lists). `spigot.js` reads
+  `document.currentScript`. No inline script, so it also works under a CSP without
+  `unsafe-inline`. The prefix goes through `check_prefix()`, which only admits
+  `[A-Za-z0-9._~-]` segments, so it cannot break out of the attribute.
+- `spigot_app()` wraps `ui` in `attach_spigot()`, a `function(req)` that calls the user's ui the
+  way Shiny does (`ui(req)` if it has formals, else `ui()`), passes an `httpResponse` through,
+  and `attachDependencies(append = TRUE)`s the rest. Shiny puts jQuery and shiny.js first, so
+  `spigot.js` always loads after them (asserted in `test-client.R`).
+- Gotcha caught by the integration test: `attach_spigot()` must `force(ui)`. `spigot_app()` does
+  `ui <- attach_spigot(ui, ...)`, so an unforced promise evaluates to the wrapper itself and
+  the page fails with "infinite recursion". A unit test now reproduces the reassignment.
+
+## 2026-10-15 — M3: spigot.js behaviour
+
+- `spigot.base` = `prefix` (leading slash dropped) + `/`, resolved against `document.baseURI`, so
+  it is the API **next to the page**. Writable. Paths have leading slashes stripped. A request's
+  URL is fixed when the call is made, even if it then waits for `ready`.
+- **For M5:** a page at a nested path (`/docs/intro`) would resolve `api/` to `/docs/api/`. Shiny's
+  own relative dependency URLs (`shared/shiny.min.js`) break the same way there, so nested
+  pages need a `<base href>` to the app root anyway; `spigot.base` follows it with no change.
+- `spigot.ready` resolves on `shiny:sessioninitialized` (M0 step 3), or immediately if the
+  token is already set. The header value is read from `Shiny.shinyapp.config.sessionId` at
+  send time, so after a Shiny reconnect requests use the new token. The header is set last:
+  `options.headers` cannot override it (any case).
+- Bodies: `FormData`, `Blob`, `URLSearchParams`, `ArrayBuffer`/views and `ReadableStream` are
+  sent unchanged; **everything else, strings included, is JSON** with
+  `Content-Type: application/json`. A string sent raw would arrive as `text/plain`, which
+  plumber does not parse as JSON; text goes in a `Blob`. `Accept: application/json` by default.
+- Replies: empty → `null`; `Content-Type` `*/json` or `*+json` that parses → the value; anything
+  else → text. Non-2xx → `SpigotError(status, message, body)`, `message` = the JSON `error`
+  field if it is a string, else `statusText`, else `HTTP <status>`. No reply → `status` 0:
+  `"... timed out after <n> ms"` or `"... failed: network error (...)"`.
+- `timeout` counts from the call (including any wait for `ready`), then aborts the fetch via
+  `AbortController`. The e2e test checks the fetch's `signal.aborted`. No default timeout yet;
+  PLAN §4.6 `spigot_options(timeout =)` will supply one.
+- `SpigotError` is ES5-style (`Object.create(Error.prototype)`), so `instanceof Error` holds.
+  It lives at `spigot.SpigotError`, not on `window`.
+- `spigot.on/off` and the `spigot:event` / `spigot:set-input` handlers (PLAN M3 step 9) are not
+  in M3. They are written in M4 and M6 with the tests that cover them.
+
+## 2026-10-15 — M3: subpath test proxy
+
+- `helper-proxy.R` `start_proxy()` runs a reverse proxy in a `callr` process: httpuv
+  `runServer()` for HTTP (forwarded with a synchronous `curl` call) and websockets (bridged to a
+  `websocket::WebSocket` client, messages buffered until the upstream opens). It strips
+  `/sub/app`, and like nginx defaults it **rewrites `Host`** to the upstream and sets
+  `X-Forwarded-Host`.
+- So the e2e test also proves, with a real browser POST, that the origin guard accepts
+  `X-Forwarded-Host` behind a proxy that rewrites `Host`. Whether Shiny Server and Posit Connect
+  behave like this proxy is still unverified (M2 entry).
+- Gotcha: `callr` `read_all_output_lines()` blocks until the process exits; use
+  `read_output_lines()` to peek at a live proxy.

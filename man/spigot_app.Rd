@@ -58,6 +58,14 @@ another host than the request's \code{Host} (or \code{X-Forwarded-Host}) get a \
 JSON response, whatever \code{require_session} is.
 }
 
+\section{The browser client}{
+
+Every page gets \code{spigot.js} (see \code{\link[=spigot_dependency]{spigot_dependency()}}), which defines
+\code{spigot.get()}, \code{spigot.post()} and friends. They send the session token
+for you, so a page's own code calls the API with
+\verb{await spigot.get("items", \{page: 2\})}.
+}
+
 \section{Request size}{
 
 Shiny rejects request bodies larger than \code{getOption("shiny.maxRequestSize")}

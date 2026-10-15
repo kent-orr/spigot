@@ -12,6 +12,9 @@
 >
 > M2 complete (2026-10-15): F19–F20 added; `max_request_size` now defaults to `NULL` (DECISIONS.md).
 
+> M3 complete (2026-10-15): prefix reaches spigot.js as a `data-prefix` attribute; `spigot.on/off` and
+> the custom message handlers move to M4/M6; nested M5 pages need a `<base href>` (DECISIONS.md).
+
 ## 1. Goal
 
 Build Shiny "sites" where:
@@ -69,7 +72,7 @@ spigot_session(req)                        # inside an endpoint: bound ShinySess
 spigot_emit(session, event, data)          # push to one tab
 spigot_broadcast(event, data)              # push to all live sessions
 spigot_trigger(session, name, value)       # set a reactive input from an endpoint
-spigot_dependency()                        # htmltools dependency for spigot.js
+spigot_dependency(prefix = "/api")          # htmltools dependency for spigot.js
 ```
 
 ### Endpoint example
@@ -90,13 +93,14 @@ function(req, sku, qty) {
 await spigot.ready;                                // resolves on shiny:sessioninitialized
 const cart = await spigot.post("cart/add", {sku, qty: 1});
 const rows = await spigot.get("forecast", {sku: "RKS0420", h: 12});
-spigot.on("cart:changed", renderCart);
+await spigot.del("cart/item", {sku}, {timeout: 2000});  // also spigot.put(), spigot.request()
+spigot.on("cart:changed", renderCart);             // M4
 ```
 
-- Relative URLs only (works under Shiny Server/Connect subpaths).
-- Sends the session token header automatically.
-- Throws `SpigotError {status, message, body}` on non-2xx.
-- JSON in and out by default; raw `fetch` is still available for files and streams.
+- Relative URLs only (works under Shiny Server/Connect subpaths). `"x"` and `"/x"` both mean `{prefix}/x`.
+- Sends the session token header automatically; calls made before the session starts wait for it.
+- Rejects with `spigot.SpigotError {status, message, body}` on non-2xx; `status` is `0` for a timeout or network failure.
+- JSON in and out by default (`FormData`/`Blob`/`URLSearchParams`/`ArrayBuffer` bodies are sent as they are); raw `fetch` is still available for streams.
 
 ## 4. Architecture
 
@@ -366,6 +370,10 @@ Goal: turn every "verify" in §4 into a recorded decision. Nothing from `spikes/
 10. `R/deps.R`: `spigot_dependency(prefix)` → `htmlDependency("spigot", version, src = c(file = "js"), package = "spigot", script = "spigot.js", head = sprintf('<script>window.__spigot={prefix:"%s"}</script>', prefix))`. `spigot_app()` attaches it to every page.
 
 **Exit:** e2e green locally with Chrome; the proxy-prefix test passes.
+
+**As built (DECISIONS.md M3):** step 10 passes the prefix as a `data-prefix` attribute on the script
+tag, not a `head` script (htmltools renders `head` after the script). The `on`/`off` registry and the
+two custom message handlers from step 9 are written in M4 and M6 with their tests.
 
 ### M4: Push
 
