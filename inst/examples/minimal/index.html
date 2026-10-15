@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>spigot · minimal example</title>
+  {{ headContent() }}
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>spigot <span>minimal example</span></h1>
+      <p>
+        This page is plain HTML and JavaScript. Every button calls a
+        <a href="https://www.rplumber.io/">plumber</a> endpoint that runs
+        <strong>inside this Shiny app</strong>, on the same origin and port,
+        under <code>/api</code>. The calls are ordinary <code>fetch()</code>
+        requests to relative URLs; see <code>www/app.js</code> and
+        <code>api.R</code>.
+      </p>
+    </header>
+
+    <section class="card">
+      <h2>GET with a query parameter</h2>
+      <form id="hello-form" class="row">
+        <label>Name <input id="hello-name" value="Ada" autocomplete="off"></label>
+        <button type="submit">GET api/hello</button>
+      </form>
+      <pre class="out" id="hello-out">Press the button.</pre>
+    </section>
+
+    <section class="card">
+      <h2>POST a JSON body</h2>
+      <form id="echo-form">
+        <textarea id="echo-body" rows="4" spellcheck="false">{"sku": "RKS0420", "qty": 2, "tags": ["boots", "work"]}</textarea>
+        <div class="row"><button type="submit">POST api/echo</button></div>
+      </form>
+      <pre class="out" id="echo-out">Press the button.</pre>
+    </section>
+
+    <section class="card">
+      <h2>A data frame, and a 400 error</h2>
+      <form id="summary-form" class="row">
+        <label>n <input id="summary-n" value="1000" inputmode="numeric" autocomplete="off"></label>
+        <button type="submit">GET api/summary</button>
+        <span class="hint">Try 0 or "abc" for a 400.</span>
+      </form>
+      <pre class="out" id="summary-out">Press the button.</pre>
+    </section>
+
+    <section class="card">
+      <h2>Async: a slow request does not block others</h2>
+      <p class="hint">
+        Start the slow request, then press Ping a few times. The pings come back in
+        milliseconds while the slow request is still pending.
+      </p>
+      <div class="row">
+        <button id="slow-btn" type="button">GET api/slow (3 s)</button>
+        <button id="ping-btn" type="button">Ping api/hello</button>
+      </div>
+      <pre class="out" id="slow-out">Press the buttons.</pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
