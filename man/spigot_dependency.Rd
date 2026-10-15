@@ -29,6 +29,11 @@ reply (text if the reply is not JSON, \code{null} if it is empty).
 \item \code{spigot.SpigotError}: what they reject with, for a non-2xx reply or when
 no reply arrives. It has \code{status} (\code{0} for a timeout or network failure),
 \code{message} (the reply's JSON \code{error} field when there is one) and \code{body}.
+\item \code{spigot.on(event, fn)}: calls \code{fn(data, event)} for each event that R
+pushes with \code{\link[=spigot_emit]{spigot_emit()}} or \code{\link[=spigot_broadcast]{spigot_broadcast()}}. Returns a function
+that removes the listener. \code{spigot.off(event, fn)} removes \code{fn};
+\code{spigot.off(event)} removes every listener of \code{event}. A listener that
+throws does not stop the others; its error is still reported.
 }
 
 Paths are relative to the API, so \code{spigot.get("items")} and

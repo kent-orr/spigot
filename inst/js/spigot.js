@@ -184,5 +184,74 @@
     return request("PUT", path, withOption(options, "body", body));
   };
 
+  // ---- push ------------------------------------------------------------------
+
+  // event name -> array of listeners. spigot_emit() and spigot_broadcast() in R
+  // send a "spigot:event" custom message {event, json}.
+  var listeners = Object.create(null);
+
+  function checkEvent(event) {
+    if (typeof event !== "string" || event === "") {
+      throw new TypeError("spigot: event must be a non-empty string");
+    }
+  }
+
+  // Calls fn(data, event) for each `event` pushed from R. Adding the same fn
+  // twice has no effect. Returns a function that removes it.
+  spigot.on = function (event, fn) {
+    checkEvent(event);
+    if (typeof fn !== "function") throw new TypeError("spigot.on: listener must be a function");
+    var list = listeners[event] || (listeners[event] = []);
+    if (list.indexOf(fn) === -1) list.push(fn);
+    return function () { spigot.off(event, fn); };
+  };
+
+  // Removes fn from `event`, or every listener of `event` when fn is omitted.
+  spigot.off = function (event, fn) {
+    checkEvent(event);
+    var list = listeners[event];
+    if (!list) return;
+    if (fn === undefined) {
+      delete listeners[event];
+      return;
+    }
+    var i = list.indexOf(fn);
+    if (i !== -1) list.splice(i, 1);
+    if (!list.length) delete listeners[event];
+  };
+
+  // Each listener runs even if an earlier one throws; the error is rethrown
+  // asynchronously so it is still reported, as a DOM event listener's is.
+  // Iterates a copy, so listeners may call on/off while the event runs.
+  function dispatch(event, data) {
+    (listeners[event] || []).slice().forEach(function (fn) {
+      try {
+        fn.call(spigot, data, event);
+      } catch (err) {
+        setTimeout(function () { throw err; }, 0);
+      }
+    });
+  }
+
+  function onEventMessage(msg) {
+    var data;
+    try {
+      data = JSON.parse(msg.json);
+    } catch (err) {
+      setTimeout(function () { throw err; }, 0);
+      return;
+    }
+    dispatch(msg.event, data);
+  }
+
+  function addHandlers() {
+    var s = window.Shiny;
+    if (!s || !s.addCustomMessageHandler) return false;
+    s.addCustomMessageHandler("spigot:event", onEventMessage);
+    return true;
+  }
+  // shiny.js loads before this script on spigot pages; wait for it otherwise.
+  if (!addHandlers()) document.addEventListener("DOMContentLoaded", addHandlers);
+
   window.spigot = spigot;
 })(window, document);

@@ -21,6 +21,7 @@ fake_session <- function(token = random_token()) {
     invisible(function() NULL)
   }
   s$isClosed <- function() ended
+  s$rootScope <- function() s
   # Test controls, not part of ShinySession.
   s$end <- function() {
     ended <<- TRUE
@@ -42,3 +43,9 @@ local_session <- function(token = random_token(), env = parent.frame()) {
 
 # Request headers that bind a request to `s`.
 session_header <- function(s) list(`X-Spigot-Session` = s$token)
+
+# A Shiny module's `session`: Shiny's own session_proxy around `root`, whose
+# `$` falls back to the root session for anything not overridden.
+fake_module_session <- function(root) {
+  shiny:::createSessionProxy(root, ns = shiny::NS("mod"))
+}

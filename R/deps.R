@@ -15,6 +15,11 @@
 #' * `spigot.SpigotError`: what they reject with, for a non-2xx reply or when
 #'   no reply arrives. It has `status` (`0` for a timeout or network failure),
 #'   `message` (the reply's JSON `error` field when there is one) and `body`.
+#' * `spigot.on(event, fn)`: calls `fn(data, event)` for each event that R
+#'   pushes with [spigot_emit()] or [spigot_broadcast()]. Returns a function
+#'   that removes the listener. `spigot.off(event, fn)` removes `fn`;
+#'   `spigot.off(event)` removes every listener of `event`. A listener that
+#'   throws does not stop the others; its error is still reported.
 #'
 #' Paths are relative to the API, so `spigot.get("items")` and
 #' `spigot.get("/items")` both request `api/items` relative to the page. This

@@ -64,7 +64,9 @@ hit_text <- function(resp) {
 }
 
 # Open a Shiny session over the websocket, as a browser tab would, without a
-# browser. Returns the session token and a close() that ends the session.
+# browser. Returns the session token, a close() that ends the session, and
+# custom(type), the payloads of the custom messages of that type received so
+# far (it runs the event loop briefly first, so pending messages arrive).
 # Waits for the first flush after init, so the server function has run.
 open_session <- function(url, timeout = 10, env = parent.frame()) {
   testthat::skip_if_not_installed("websocket")
@@ -89,7 +91,19 @@ open_session <- function(url, timeout = 10, env = parent.frame()) {
     later::run_now(0.05)
   }
   config <- Filter(function(m) grepl('"config"', m, fixed = TRUE), msgs)[[1]]
-  list(token = jsonlite::fromJSON(config)$config$sessionId, close = close)
+  custom <- function(type, wait = 0.2) {
+    deadline <- Sys.time() + wait
+    repeat {
+      later::run_now(0.02)
+      if (Sys.time() > deadline) break
+    }
+    found <- lapply(msgs, function(m) {
+      x <- jsonlite::fromJSON(m, simplifyVector = FALSE)
+      x$custom[[type]]
+    })
+    Filter(Negate(is.null), found)
+  }
+  list(token = jsonlite::fromJSON(config)$config$sessionId, close = close, custom = custom)
 }
 
 # Poll `f()` until it is TRUE or `timeout` seconds pass; returns the last value.

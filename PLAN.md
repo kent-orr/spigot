@@ -15,6 +15,10 @@
 > M3 complete (2026-10-15): prefix reaches spigot.js as a `data-prefix` attribute; `spigot.on/off` and
 > the custom message handlers move to M4/M6; nested M5 pages need a `<base href>` (DECISIONS.md).
 
+> M4 complete (2026-10-15): `spigot.on()` returns an unsubscribe function; `spigot_emit(NULL)` returns
+> `FALSE`; broadcast reaches every spigot session in the R process and takes `except =`/`filter =`
+> (DECISIONS.md).
+
 ## 1. Goal
 
 Build Shiny "sites" where:
@@ -70,7 +74,7 @@ spigot_api(file = NULL, envir = parent.frame())  # plumber::pr() with spigot_jso
 spigot_page(template, data = list(), partials = list(), cache = FALSE)
 spigot_session(req)                        # inside an endpoint: bound ShinySession or NULL
 spigot_emit(session, event, data)          # push to one tab
-spigot_broadcast(event, data)              # push to all live sessions
+spigot_broadcast(event, data, except, filter) # push to all live sessions (or some)
 spigot_trigger(session, name, value)       # set a reactive input from an endpoint
 spigot_dependency(prefix = "/api")          # htmltools dependency for spigot.js
 ```

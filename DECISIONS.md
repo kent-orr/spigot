@@ -300,3 +300,44 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   borrow a live tab's session. A first draft that explained all of that was rejected as too
   strong a pointer for a caller who should not be using the API.
 - It still tells any caller that the server is a spigot app. Accepted: nothing secret is revealed.
+
+## 2026-10-15 — M4: push
+
+- `ShinySession$sendCustomMessage()` writes to the websocket immediately (shiny 1.14.0:
+  `sendMessage()` → `write()` → `websocket$send()`), not at the next flush, and silently does
+  nothing once the session is closed. So an endpoint can emit without a reactive context, and
+  an event can reach the page before the endpoint's HTTP reply (as M0 step 5 measured).
+- Message: `sendCustomMessage("spigot:event", list(event, json))`, where `json` is a plain
+  string from `spigot_json()`, so Shiny's own `toJSON()` (different `dataframe`/`digits`
+  settings) never shapes the payload. `spigot.js` `JSON.parse`s it. `spigot_broadcast()`
+  serialises once for all sessions.
+- `spigot_emit(NULL, ...)` warns and returns `FALSE` (an endpoint run with
+  `require_session = FALSE` and no token). A non-session object errors. Event names: any
+  non-empty string, in R and JS.
+- `spigot_broadcast()` sends to every session in the registry, skipping and pruning any that
+  `isClosed()` or whose send throws, silently: a closed-socket race is expected, not an error.
+  It returns the number reached. **Scope:** the registry is process-global (M2 entry), so
+  broadcast reaches every spigot app's sessions **in this R process**. Kept: deployments run
+  one app per process. Revisit with a per-app registry only if that changes.
+- JS: `spigot.on(event, fn)` returns an unsubscribe function; adding the same `fn` twice is a
+  no-op (as `addEventListener`); `spigot.off(event)` with no `fn` removes all of that event's
+  listeners. Listeners run on a copy of the list, so one may `off` itself mid-dispatch.
+  A throwing listener does not stop the rest; its error is rethrown in a `setTimeout`, so it
+  still reaches the console and `window.onerror`, as a DOM listener's error does. Listeners
+  get `(data, event)` with `this === spigot`.
+- `spigot_broadcast(except =, filter =)`, added for multi-user pages (one tab's action updates
+  the others; chat rooms). `except`: a session or list of sessions, compared by identity after
+  `rootScope()`, because a module's `session` is a `session_proxy` that is never `identical()`
+  to the registered root (Shiny's real proxy is used in the test). `filter(session)` must return
+  `TRUE`/`FALSE`; it runs for every open session **before** any send, so a failing filter sends
+  nothing rather than half a broadcast. Rooms are just `filter` over `session$userData`; a
+  `spigot_join()`/`room =` API waits for a real need.
+- Multi-user reach is one R process. Open-source Shiny Server runs one process per app; Posit
+  Connect can start several (max processes / connections per process), and users in different
+  processes do not see each other's broadcasts. Cross-process push needs an external relay
+  (Redis, Postgres `LISTEN/NOTIFY`) and is out of scope. Document for M7.
+- No replay: events that arrive before the page calls `spigot.on()` for them are dropped.
+- The "live" vignette draft is the `spigot_emit()` help page (one tab vs all, shapes,
+  push-before-reply ordering, emit from the main process not a `future` worker).
+- Integration tests read pushes from the websocket without Chrome: `open_session()` now
+  returns `custom(type)`.

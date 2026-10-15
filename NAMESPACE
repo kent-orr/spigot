@@ -3,6 +3,8 @@
 export(run_example)
 export(spigot_api)
 export(spigot_app)
+export(spigot_broadcast)
 export(spigot_dependency)
+export(spigot_emit)
 export(spigot_json)
 export(spigot_session)
