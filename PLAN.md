@@ -7,6 +7,8 @@
 > shiny 1.14.0 (installed) and plumber `main` on GitHub (CRAN 1.3.3). See §4.0.
 >
 > M0 complete (2026-10-15): all spikes recorded in DECISIONS.md; stale facts above corrected.
+>
+> M1 complete (2026-10-15): F16–F18 added; `spigot_api()` signature changed (DECISIONS.md).
 
 ## 1. Goal
 
@@ -59,7 +61,7 @@ spigot_app(
   max_request_size = 5 * 1024^2  # forwarded to options(shiny.maxRequestSize)
 )
 
-spigot_api(file, envir = parent.frame())   # thin wrapper over plumber::pr()
+spigot_api(file = NULL, envir = parent.frame())  # plumber::pr() with spigot_json() as default serializer
 spigot_page(template, data = list(), partials = list(), cache = FALSE)
 spigot_session(req)                        # inside an endpoint: bound ShinySession or NULL
 spigot_emit(session, event, data)          # push to one tab
@@ -117,6 +119,9 @@ These were read from source, not assumed. Re-verify when bumping either dependen
 | F13 | plumber's default `bodyFilter` does `req$bodyRaw <- req$rook.input$read()` once. | The mount must **not** read `rook.input` before `pr$call()`. If it ever must, call `rook.input$rewind()` after. |
 | F14 | `plumber.trailingSlash` defaults to `FALSE`; `plumber.methodNotAllowed` defaults to `TRUE` (405 when path exists under another verb). | After stripping the prefix, map `""` to `"/"`. Expect 405, not 404, for wrong-verb tests. |
 | F15 | Shiny's `sendCustomMessage` serialises with Shiny's `toJSON` settings (`auto_unbox = TRUE`). | Pre-serialise push payloads with our own `jsonlite::toJSON()` config and send a single string (§4.4). |
+| F16 | `shinyAppDir()` serves `www/` as an httpuv static path at `/`; httpuv answers non-GET requests under it with 400 before R runs. Static paths come from the *outer* appobj. | `mount_app()` adds `excludeStaticPath()` for the prefix via `getShinyOption("server")$setStaticPath()` on the first loop tick after `onStart` (DECISIONS.md M1). |
+| F17 | plumber copies the router's default serializer into each endpoint at creation; file endpoints without `@serializer` resolve it per request. | `spigot_api()` with no file returns a router that already has the serializer; a `Plumber` passed in is left unchanged. |
+| F18 | httpuv sets both `CONTENT_TYPE` and `HTTP_CONTENT_TYPE` (plumber reads the latter), plus `HEADERS`. | `fake_req()` mirrors this. |
 
 Environment on this dev machine: R 4.5.2, shiny 1.14.0, whisker 0.4.1, htmltools 0.5.9,
 jsonlite 2.0.0, promises 1.5.0, httr2 1.3.0, callr 3.8.0, testthat 3.3.2, later 1.4.8,
@@ -127,6 +132,7 @@ future 1.70.0, httpuv 1.6.17, plumber 1.3.3, chromote 0.5.1 + Chrome for Testing
 
 - Replace `app$httpHandler` with a wrapper. Requests matching `^{prefix}(/|$)` have the prefix moved from `PATH_INFO` to `SCRIPT_NAME` (same trick as Shiny's own `routeHandler()`), then go to `pr$call(req)`. The result (value or promise) is chained with `rook_to_httpResponse()` (F4, F12).
 - Everything else returns `NULL` from the wrapper → falls through to the original handler and Shiny's static/resource handlers (F2).
+- The prefix is excluded from httpuv static serving at startup (F16), or API POSTs in an app dir with `www/` get 400.
 - **Risk:** depends on the `shiny.appobj` structure (F1). Mitigate by: asserting the structure at `spigot_app()` time and failing loudly; pinning `shiny (>= 1.14.0)` initially and walking the lower bound back in CI; keeping `mount.R` the only file touching it.
 
 ### 4.2 Session binding
@@ -203,7 +209,7 @@ spigot/
 │       ├── minimal/   # one page, one endpoint
 │       ├── live/      # push + spigot_trigger
 │       └── site/      # multi-page, partials, async endpoint
-├── spikes/            # M0 only; deleted before M1 is merged
+├── (spikes/)          # M0 only; deleted in M1 (see git history)
 ├── tests/testthat/
 │   ├── helper-req.R       # fake_req(): Rook request environment with rook.input
 │   ├── helper-server.R    # callr + httr2 harness, random port, readiness wait
@@ -237,7 +243,7 @@ Each milestone follows the same loop:
 
 Shared test harness (write during M1, reuse everywhere):
 
-- `fake_req(method = "GET", path = "/", query = "", body = NULL, headers = list())` → an environment shaped like httpuv's: `REQUEST_METHOD`, `PATH_INFO`, `SCRIPT_NAME = ""`, `QUERY_STRING`, `HTTP_HOST = "127.0.0.1:1234"`, `CONTENT_TYPE`, `CONTENT_LENGTH`, `HTTP_*` for each header, and `rook.input` = an R6/list object with `read()`, `read_lines()`, `rewind()` over a raw vector. Lets most mount/session tests run with no server.
+- `fake_req(method = "GET", path = "/", query = "", body = NULL, headers = list())` → an environment shaped like httpuv's: `REQUEST_METHOD`, `PATH_INFO`, `SCRIPT_NAME = ""`, `QUERY_STRING` (with leading `?`), `HTTP_HOST = "127.0.0.1:1234"`, `CONTENT_TYPE` and `HTTP_CONTENT_TYPE`, `CONTENT_LENGTH` and `HTTP_CONTENT_LENGTH`, `HTTP_*` for each header, `HEADERS` (F18), and `rook.input` = an R6/list object with `read()`, `read_lines()`, `rewind()` over a raw vector. Lets most mount/session tests run with no server.
 - `start_app(app_dir_or_expr)` → `callr::r_bg()` running `shiny::runApp(..., port = httpuv::randomPort(), launch.browser = FALSE)`; polls `httr2::request(url)` until 200 or 10 s; returns `list(url, proc)`; `withr::defer(proc$kill())` in the caller.
 - `skip_if_no_chrome()` → `testthat::skip_if_not_installed("chromote")` plus `chromote::find_chrome()` is non-NULL (chromote ≥ 0.5 can also download one via `chromote::local_chrome_version()`; document that for CI).
 - `new_tab(url)` → `chromote::ChromoteSession$new()`, navigate, wait for `window.Shiny && Shiny.shinyapp.config` via `Runtime.evaluate` polling.
@@ -307,7 +313,7 @@ Goal: turn every "verify" in §4 into a recorded decision. Nothing from `spikes/
 
 6. `R/json.R`: `spigot_json()`.
 7. `R/rook.R`: `rook_to_httpResponse()`, `json_error()`.
-8. `R/api.R`: `spigot_api(file, envir)` → `plumber::pr(file, envir = envir)`; also accept a `Plumber` object unchanged; also set the router's default serializer to use `spigot_json()` via `pr$setSerializer(plumber::serializer_json(...same args...))` (keep this call in one place; plumber's own `serializer_json` args mirror `spigot_json()`).
+8. `R/api.R`: `spigot_api(file = NULL, envir)` → `plumber::pr(file, envir = envir)` with `pr$setSerializer()` set to a serializer that calls `spigot_json()` itself (one config, one place). A `Plumber` object is returned unchanged (F17).
 9. `R/mount.R`: `spigot_mount_handler(pr, prefix, fallback, guard = NULL)` returning `function(req)`. Logic in order: prefix match → `on.exit` restore of `SCRIPT_NAME`/`PATH_INFO` → optional `guard(req)` (M2) → `tryCatch(pr$call(req))` → `promises::hybrid_chain` style: if promise, `then(rook_to_httpResponse)`; else convert directly. `mount_app(app, handler)` asserts `inherits(app, "shiny.appobj")` and `is.function(app$httpHandler)` then replaces the field (F1). This is the only function that knows the appobj shape.
 10. `R/app.R` skeleton: `spigot_app(pages = NULL, server = NULL, api, prefix = "/api", ...)` that for now takes `ui` (M5 replaces this) and returns the mounted `shiny.appobj`.
 

@@ -1,7 +1,8 @@
 # DECISIONS
 
-One dated entry per decision. Evidence comes from `spikes/` (M0), which is
-deleted when M1 merges. Re-run the relevant spike when bumping shiny or plumber.
+One dated entry per decision. M0 evidence came from `spikes/`, deleted in M1
+(recover it from the `first commit` in git history); M1+ evidence lives in
+`tests/testthat/`. Re-run the relevant spike or test when bumping shiny or plumber.
 
 Environment for all M0 entries: R 4.5.2, Ubuntu 26.04.1, shiny 1.14.0,
 plumber 1.3.3 (CRAN), httpuv 1.6.17, whisker 0.4.1, htmltools 0.5.9,
@@ -105,3 +106,59 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   the handler, before the HTTP response. Client code must not assume HTTP-response-then-push
   ordering. This goes in the reactivity vignette.
 - **M6 regression bound** (5 × spike p95): trigger latency median **< 215 ms**.
+
+## 2026-10-15 — M1: httpuv static paths answer API POSTs with 400 (F16)
+
+- **Found by** the M1 integration fixture, which is an app *directory* with `www/`. Every API
+  `POST` returned plain-text `400 Bad Request`, while `GET` worked. The M0 spikes missed this
+  because they ran `shinyApp()` objects, which have no static path at `/`.
+- **Cause:** `shinyAppDir()` registers `www/` as an httpuv static path at `/` (fallthrough).
+  httpuv answers non-GET requests under a static path itself, on its I/O thread, before R sees
+  them. Shiny excludes its own `/session` with `excludeStaticPath()` for the same reason.
+  `startHttpuvApp()` builds the static paths from the **outer** appobj, so the inner appobj
+  returned by `app.R` cannot add an exclusion. This affects every deployed app dir with `www/`
+  (Shiny Server, Connect).
+- **Decision:** `mount_app()` wraps `onStart`. It calls `later::later()` to run
+  `getShinyOption("server")$setStaticPath(<prefix> = excludeStaticPath())` on the first
+  event-loop tick. `onStart` runs before the httpuv server exists; `shinyOptions(server =)` is
+  set right after it. Shiny's exported `addResourcePath()` uses the same server handle, and
+  `WebServer$setStaticPath()` is public httpuv API. Scratch check: without the fix POST → 400;
+  with it POST/GET → 200 and `www/` files are still served. This also keeps a `www/api/` folder
+  from shadowing API GETs.
+- **Residual window:** a non-GET API request that arrives between `listen()` and the first loop
+  tick still gets 400. Page loads go through the same later queue, behind the exclusion, so a
+  browser cannot hit this window. With M2's `require_session = TRUE` an API call needs a loaded
+  page, so the window is closed in practice.
+- Regression guard: `test-mount.R` integration tests (fixture `apps/mount/` has `www/`).
+
+## 2026-10-15 — M1: plumber binds the default serializer at endpoint creation (F17)
+
+- `pr$handle()` (and so `pr_get()` etc.) copies `private$default_serializer` into the endpoint
+  **when the endpoint is created**. Endpoints parsed from a file without `@serializer` store
+  `NULL` and use the router default at request time.
+- So `pr$setSerializer()` after `pr() |> pr_get(...)` has no effect on those endpoints. The
+  M1 step 8 plan (set the serializer on a router passed in) could not work.
+- **Decision:** `spigot_api(file = NULL)`. `NULL` returns an empty router that already has the
+  `spigot_json()` serializer, so routers built in code start from it:
+  `spigot_api() |> pr_get(...)`. A file path → `pr(file)` + serializer (works, see above). A
+  `Plumber` object is returned **unchanged and not mutated**: its endpoints keep their
+  serializers. `spigot_app(api = <Plumber>)` uses it as given.
+
+## 2026-10-15 — M1: request env fidelity and mount details
+
+- httpuv sets **both** `CONTENT_TYPE` and `HTTP_CONTENT_TYPE` (and both `CONTENT_LENGTH`
+  forms), plus `HEADERS` (named, lowercase) and `REMOTE_PORT`. plumber reads
+  `HTTP_CONTENT_TYPE`. `fake_req()` mirrors this (checked against a live httpuv request).
+- Binary request bodies need `parsers = "octet"` on the endpoint. plumber's default parser set
+  falls back to text, and `rawToChar()` fails on NUL bytes (500). This is ordinary plumber
+  usage; the getting-started vignette should mention it.
+- `spigot_mount_handler()` forces `fallback`. Otherwise `mount_app()`'s
+  `fallback = app$httpHandler` is a lazy promise, first evaluated after the field is replaced,
+  so the handler calls itself (`node stack overflow`, seen as Shiny's HTML 500 on `GET /`).
+- The rewritten `PATH_INFO`/`SCRIPT_NAME` are restored when the request finishes. For async
+  results that is in `promises::finally()`, not `on.exit()`, because plumber routes after async
+  filters resolve. Test: "the prefix stays stripped until an async filter has finished routing".
+- Mount-level failures (sync or async) → `{"error":"internal server error"}` 500. The condition
+  message goes to stderr via `message()` and never to the client.
+- Prefix rule: `^(/[A-Za-z0-9._~-]+)+$`. The first segment must not be `session` or `shared`
+  (Shiny serves both itself).

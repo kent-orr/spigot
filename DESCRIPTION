@@ -1,0 +1,30 @@
+Package: spigot
+Title: Plumber Endpoints Inside a Shiny App
+Version: 0.0.0.9000
+Authors@R: 
+    person("Kent", "Orr", , "orr.kent@pawpawanalytics.com", role = c("aut", "cre"))
+Description: Mounts a 'plumber' router inside a 'shiny' app so hand-written
+    HTML/JavaScript pages can call R endpoints on the same origin and port,
+    while 'shiny' provides hosting, per-tab sessions and server push.
+License: file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends: 
+    R (>= 4.1.0)
+Imports: 
+    httpuv,
+    jsonlite,
+    later,
+    plumber (>= 1.0.0),
+    promises,
+    shiny (>= 1.14.0)
+Suggests: 
+    callr,
+    curl,
+    future,
+    httr2,
+    pkgload,
+    testthat (>= 3.0.0),
+    withr
+Config/testthat/edition: 3
