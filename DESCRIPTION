@@ -6,7 +6,7 @@ Authors@R:
 Description: Mounts a 'plumber' router inside a 'shiny' app so hand-written
     HTML/JavaScript pages can call R endpoints on the same origin and port,
     while 'shiny' provides hosting, per-tab sessions and server push.
-License: file LICENSE
+License: MIT + file LICENSE
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
