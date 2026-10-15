@@ -50,8 +50,9 @@ header, and spigot binds the request to that session; endpoints read it with
 \code{\link[=spigot_session]{spigot_session()}}. A token stops working as soon as its session ends.
 
 With \code{require_session = TRUE}, API requests without a live session's token
-get a \code{401} JSON response, \code{{"error": "session required"}}, so only open
-pages of this app can call the API.
+get a \code{401} JSON response, \verb{\{"error": "session required", "hint": "..."\}},
+so only open pages of this app can call the API. The \code{hint} points at
+\code{require_session = FALSE}.
 
 API requests whose \code{Origin} header (or, without one, \code{Referer}) names
 another host than the request's \code{Host} (or \code{X-Forwarded-Host}) get a \code{403}

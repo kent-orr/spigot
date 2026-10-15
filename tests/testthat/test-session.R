@@ -167,8 +167,17 @@ test_that("missing, unknown, ended and malformed tokens get 401 JSON", {
     r <- h(fake_req("GET", "/api/whoami", headers = cases[[nm]]))
     expect_identical(r$status, 401L, info = nm)
     expect_identical(r$content_type, "application/json", info = nm)
-    expect_identical(resp_json(r), list(error = "session required"), info = nm)
+    body <- resp_json(r)
+    expect_named(body, c("error", "hint"), info = nm)
+    expect_identical(body$error, "session required", info = nm)
+    # The hint points developers at the setting, without explaining tokens.
+    expect_identical(body$hint, SESSION_HINT, info = nm)
   }
+})
+
+test_that("the 401 hint names the setting and says nothing about tokens", {
+  expect_match(SESSION_HINT, "spigot_app(..., require_session = FALSE)", fixed = TRUE)
+  expect_no_match(SESSION_HINT, "token|X-Spigot-Session|sessionId", ignore.case = TRUE)
 })
 
 test_that("a malformed token is rejected without touching the registry", {
@@ -307,7 +316,8 @@ test_that("a live session's token unlocks the API; others get 401", {
   for (h in list(list(), list(`X-Spigot-Session` = random_token()))) {
     r <- hit(u, headers = h)
     expect_identical(httr2::resp_status(r), 401L)
-    expect_identical(httr2::resp_body_json(r), list(error = "session required"))
+    expect_identical(httr2::resp_body_json(r)$error, "session required")
+    expect_identical(httr2::resp_body_json(r)$hint, SESSION_HINT)
   }
 })
 

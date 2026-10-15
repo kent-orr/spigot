@@ -11,8 +11,9 @@
 #' [spigot_session()]. A token stops working as soon as its session ends.
 #'
 #' With `require_session = TRUE`, API requests without a live session's token
-#' get a `401` JSON response, `{"error": "session required"}`, so only open
-#' pages of this app can call the API.
+#' get a `401` JSON response, `{"error": "session required", "hint": "..."}`,
+#' so only open pages of this app can call the API. The `hint` points at
+#' `require_session = FALSE`.
 #'
 #' API requests whose `Origin` header (or, without one, `Referer`) names
 #' another host than the request's `Host` (or `X-Forwarded-Host`) get a `403`

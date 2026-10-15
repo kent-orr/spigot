@@ -26,10 +26,10 @@ rook_to_httpResponse <- function(res) {
 }
 
 # A JSON error response: {"error": message}.
-json_error <- function(status, message) {
+json_error <- function(status, message, hint = NULL) {
   shiny::httpResponse(
     as.integer(status),
     "application/json",
-    as.character(spigot_json(list(error = message)))
+    as.character(spigot_json(c(list(error = message), if (!is.null(hint)) list(hint = hint))))
   )
 }

@@ -121,6 +121,10 @@ exclude_static_prefix <- function(server, prefix) {
 
 SPIGOT_HEADER <- "HTTP_X_SPIGOT_SESSION"
 
+# Added to every 401. Points a developer calling the API by hand at the
+# setting, without explaining how to obtain a token.
+SESSION_HINT <- "You may be interested in spigot_app(..., require_session = FALSE)."
+
 # The guard spigot_app() installs: origin first, then session.
 request_guard <- function(require_session = TRUE) {
   if (!is_flag(require_session)) {
@@ -145,7 +149,9 @@ session_guard <- function(require_session = TRUE) {
     token <- req[[SPIGOT_HEADER]]
     session <- if (is_token(token)) lookup_session(token)
     if (is.null(session)) {
-      if (require_session) return(json_error(401L, "session required"))
+      if (require_session) {
+        return(json_error(401L, "session required", hint = SESSION_HINT))
+      }
       return(NULL)
     }
     req$spigot_session <- session

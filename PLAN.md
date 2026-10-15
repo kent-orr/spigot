@@ -336,7 +336,7 @@ Goal: turn every "verify" in §4 into a recorded decision. Nothing from `spikes/
 2. Unit, server wrapper: `wrap_server(user_server)` returns a function with the same formals (`input, output, session`), calls `register_session` first, then the user server; a user server with only `(input, output)` is also accepted (Shiny permits it).
 3. Unit, guard via `fake_req()` + mount handler with `guard = session_guard(require_session = TRUE)`:
    - valid header, registered token → endpoint sees `spigot_session(req)` identical to the fake session.
-   - header missing → 401 JSON `{"error":"session required"}`; unknown token → 401; token of an ended session → 401; non-hex token (`"../x"`) → 401 without touching the registry.
+   - header missing → 401 JSON `{"error":"session required", "hint": …}` (hint added after M3); unknown token → 401; token of an ended session → 401; non-hex token (`"../x"`) → 401 without touching the registry.
    - `require_session = FALSE`: missing header → endpoint runs, `spigot_session(req)` is `NULL`; present and valid → bound.
    - `Origin: http://evil.test` with `Host: 127.0.0.1:1234` → 403; matching origin → passes; `Origin` absent but `Referer` cross-host → 403; both absent → passes.
    - Guard rejections short-circuit: the plumber router is never called (spy with a `pr` stub counting calls).

@@ -29,7 +29,8 @@ test_that("spigot_app() requires a live session by default", {
   app <- spigot_app(ui = shiny::fluidPage("x"), api = test_router())
   r <- app$httpHandler(fake_req("GET", "/api/items"))
   expect_identical(r$status, 401L)
-  expect_identical(resp_json(r), list(error = "session required"))
+  expect_identical(resp_json(r)$error, "session required")
+  expect_identical(resp_json(r)$hint, SESSION_HINT)
 
   s <- local_session()
   r <- app$httpHandler(fake_req("GET", "/api/items", headers = session_header(s)))

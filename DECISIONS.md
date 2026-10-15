@@ -288,3 +288,15 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   behave like this proxy is still unverified (M2 entry).
 - Gotcha: `callr` `read_all_output_lines()` blocks until the process exits; use
   `read_output_lines()` to peek at a live proxy.
+
+## 2026-10-15 — 401 responses carry a `hint`
+
+- Calling the API by hand (curl, Postman) against an app with `require_session = TRUE` gave a bare
+  `{"error":"session required"}`. The 401 body is now
+  `{"error": "session required", "hint": "You may be interested in spigot_app(..., require_session = FALSE)."}`.
+  `error` is unchanged, so `SpigotError.message` in spigot.js is the same.
+- The hint is deliberately terse and the same for every 401: it points a developer at the setting
+  so they can troubleshoot from the docs, and says nothing about tokens, the header, or how to
+  borrow a live tab's session. A first draft that explained all of that was rejected as too
+  strong a pointer for a caller who should not be using the API.
+- It still tells any caller that the server is a spigot app. Accepted: nothing secret is revealed.

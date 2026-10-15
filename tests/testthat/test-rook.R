@@ -71,3 +71,8 @@ test_that("json_error() builds a JSON httpResponse", {
   expect_identical(r$content_type, "application/json")
   expect_identical(resp_json(r), list(error = "session required"))
 })
+
+test_that("json_error() can add a hint", {
+  r <- json_error(401L, "session required", hint = "send a token")
+  expect_identical(resp_json(r), list(error = "session required", hint = "send a token"))
+})
