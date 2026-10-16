@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>{{title}}</title>
+</head>
+<body>
+  {{> nav}}
+  <a id="to-about" href="about">about</a>
+  <a id="to-sec" href="#sec">section</a>
+  <a id="blocked" href="#blocked">blocked by the page</a>
+  <div style="height: 3000px"></div>
+  <h2 id="sec">Section</h2>
+  <script>
+    document.getElementById("blocked").addEventListener("click", function (e) {
+      e.preventDefault();
+    });
+  </script>
+</body>
+</html>

@@ -45,16 +45,18 @@ handled by Shiny as usual (\verb{www/} files, for an app directory).
 \section{Pages}{
 
 \code{pages} is one page, served at \code{/}, or a named list of them, such as
-\code{list("/" = home, "/about" = about)}. A path is \code{/} or a single segment
-(\verb{/about}, not \verb{/docs/intro}), so relative URLs in every page resolve
-from the app's root. \verb{/about/} redirects to \verb{/about}, and any other path
-that is not a page or a file gets a \code{404} HTML page. Only \code{GET} requests
-reach a page.
+\code{list("/" = home, "/about" = about, "/docs/intro" = intro)}. A path is
+\code{/} or one or more segments, not under the API \code{prefix}. Relative URLs in
+every page resolve from the app's root (see \code{\link[=spigot_page]{spigot_page()}}).
+\verb{/about/} redirects to \verb{/about}, and any other path that is not a page or
+a file gets a \code{404} HTML page. Only \code{GET} requests reach a page.
 
-A page is usually a \code{\link[=spigot_page]{spigot_page()}}: a hand-written HTML template. It can
-also be anything \code{\link[shiny:shinyApp]{shiny::shinyApp()}} accepts as \code{ui}, such as
-\code{\link[shiny:fluidPage]{shiny::fluidPage()}}, an \code{\link[shiny:reexports]{shiny::htmlTemplate()}} document, or a
-\verb{function(req)} returning one of those (or an \code{\link[shiny:httpResponse]{shiny::httpResponse()}}).
+A page is usually a \code{\link[=spigot_page]{spigot_page()}}: a hand-written HTML template. A
+top-level page (\code{/}, \verb{/about}) can also be anything \code{\link[shiny:shinyApp]{shiny::shinyApp()}}
+accepts as \code{ui}, such as \code{\link[shiny:fluidPage]{shiny::fluidPage()}}, an \code{\link[shiny:reexports]{shiny::htmlTemplate()}}
+document, or a \verb{function(req)} returning one of those (or an
+\code{\link[shiny:httpResponse]{shiny::httpResponse()}}). Below the top level, pages must be
+\code{spigot_page()}s.
 }
 
 \section{Sessions}{

@@ -21,6 +21,10 @@
 #'   `spigot.off(event)` removes every listener of `event`. A listener that
 #'   throws does not stop the others; its error is still reported.
 #'
+#' On a page below the top level, which [spigot_app()] gives a
+#' `<base href>`, the script also keeps plain clicks on `href="#section"`
+#' links on the page (see [spigot_page()]).
+#'
 #' Paths are relative to the API, so `spigot.get("items")` and
 #' `spigot.get("/items")` both request `api/items` relative to the page. This
 #' keeps working when the app is served under a subpath. Every request carries

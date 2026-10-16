@@ -253,5 +253,24 @@
   // shiny.js loads before this script on spigot pages; wait for it otherwise.
   if (!addHandlers()) document.addEventListener("DOMContentLoaded", addHandlers);
 
+  // ---- nested pages ----------------------------------------------------------
+
+  // spigot_app() gives a page below the top level <base href="../" data-spigot>
+  // so relative URLs resolve from the app root. A base also sends
+  // href="#section" to the root, so keep those links on this page. Leaves
+  // alone clicks the page has handled, modified clicks and other targets.
+  function onFragmentClick(e) {
+    if (e.defaultPrevented || e.button !== 0 ||
+        e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+    if (!document.querySelector("base[data-spigot]")) return;
+    var a = e.target && e.target.closest ? e.target.closest("a[href]") : null;
+    if (!a || (a.target && a.target !== "_self")) return;
+    var href = a.getAttribute("href");
+    if (href.charAt(0) !== "#") return;
+    e.preventDefault();
+    window.location.hash = href;
+  }
+  document.addEventListener("click", onFragmentClick);
+
   window.spigot = spigot;
 })(window, document);

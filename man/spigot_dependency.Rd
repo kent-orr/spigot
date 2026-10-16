@@ -36,6 +36,10 @@ that removes the listener. \code{spigot.off(event, fn)} removes \code{fn};
 throws does not stop the others; its error is still reported.
 }
 
+On a page below the top level, which \code{\link[=spigot_app]{spigot_app()}} gives a
+\verb{<base href>}, the script also keeps plain clicks on \code{href="#section"}
+links on the page (see \code{\link[=spigot_page]{spigot_page()}}).
+
 Paths are relative to the API, so \code{spigot.get("items")} and
 \code{spigot.get("/items")} both request \code{api/items} relative to the page. This
 keeps working when the app is served under a subpath. Every request carries

@@ -13,6 +13,10 @@ spigot::spigot_app(
                               partials = list(nav = "nav.html")),
     "/about" = spigot::spigot_page(plain, data = list(title = "about"),
                                    partials = list(nav = "nav.html")),
+    "/docs/intro" = spigot::spigot_page("docs.html", data = list(title = "intro"),
+                                        partials = list(nav = "nav.html")),
+    "/docs/a/b" = spigot::spigot_page("docs.html", data = list(title = "deep"),
+                                      partials = list(nav = "nav.html"), cache = TRUE),
     "/fluid" = fluidPage(tags$p("spigot-page-fluid")),
     "/fresh" = spigot::spigot_page(
       "<html><head></head><body>q={{q}} t={{t}}</body></html>",

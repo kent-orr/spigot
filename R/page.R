@@ -23,9 +23,20 @@
 #' whisker's `name.mustache` files).
 #'
 #' @section Relative URLs:
-#' Pages live one level deep (`/`, `/about`), so relative URLs in a page,
-#' Shiny's own included, resolve from the app's root. A request for
-#' `/about/` is redirected to `/about` for the same reason.
+#' Relative URLs in every page resolve from the app's root: `href="about"`,
+#' `href="docs/intro"` and `src="logo.png"` (a `www/` file) mean the same
+#' on every page, and so do Shiny's own script URLs. For a page below the
+#' top level (`/docs/intro`), spigot puts `<base href="../">` (one `../`
+#' per level) first in its `<head>` to do this, so such a template needs a
+#' `<head>` tag. A template with its own `<base>` keeps it.
+#'
+#' A `<base>` would also send `href="#section"` links to the app root, so
+#' `spigot.js` keeps plain clicks on them on the page. Other URLs relative
+#' to the page itself, such as `href="?tab=2"`, resolve from the root too:
+#' write the page's path (`href="docs/intro?tab=2"`).
+#'
+#' A request for `/about/` is redirected to `/about`, where the relative
+#' URLs resolve as intended.
 #'
 #' @param template The template: its text, or the path of a file holding it.
 #' @param data A named list of values for the template, or a function that
@@ -66,18 +77,20 @@ spigot_page <- function(template, data = list(), partials = list(), cache = FALS
   }
   check_partial_refs(c(list(template = template), partials), names(partials))
 
-  render_now <- function(req) {
+  render_html <- function(req) {
     values <- if (is.function(data)) call_with_req(data, req) else data
     if (!is.list(values)) {
       stop("The `data` function of the page ", label, " must return a list.", call. = FALSE)
     }
-    as_html_document(render_whisker(template, values, partials), label)
+    render_whisker(template, values, partials)
   }
+  # `base`: the <base href> for a page served below the top level, or NULL.
+  # The cache holds the HTML before it, as one page may be served at several
+  # depths.
   cached <- NULL
-  render <- function(req) {
-    if (!cache) return(render_now(req))
-    if (is.null(cached)) cached <<- render_now(req)
-    cached
+  render <- function(req, base = NULL) {
+    html <- if (!cache) render_html(req) else cached %||% (cached <<- render_html(req))
+    as_html_document(html, label, base)
   }
 
   structure(list(label = label, data = data, partials = names(partials), cache = cache,
@@ -189,8 +202,8 @@ in_dir <- function(dir, code) {
 # Split rendered HTML at its first </head> and hand both halves to Shiny as
 # HTML() values in a fixed template, so Shiny adds its <head> content there
 # and nothing the page rendered is ever read as an htmlTemplate (DECISIONS.md,
-# M0 step 4).
-as_html_document <- function(html, label) {
+# M0 step 4). A `base` href goes first in <head>, unless the page has a <base>.
+as_html_document <- function(html, label, base = NULL) {
   at <- regexpr("</head\\s*>", html, ignore.case = TRUE)
   if (at < 0) {
     stop("The page ", label, " rendered without a </head>; spigot needs a full HTML ",
@@ -198,15 +211,43 @@ as_html_document <- function(html, label) {
   }
   head <- substr(html, 1L, at - 1L)
   rest <- substr(html, at + attr(at, "match.length"), nchar(html))
+  if (!is.null(base)) head <- insert_base(head, base, label)
   htmltools::htmlTemplate(
     text_ = "{{ head }}{{ headContent() }}</head>{{ rest }}",
     head = htmltools::HTML(head), rest = htmltools::HTML(rest), document_ = TRUE
   )
 }
 
+insert_base <- function(head, base, label) {
+  if (grepl("<base[\\s>]", head, ignore.case = TRUE, perl = TRUE)) return(head)
+  open <- regexpr("<head(\\s[^>]*)?>", head, ignore.case = TRUE, perl = TRUE)
+  if (open < 0) {
+    stop("The page ", label, " is served below the top level, so it needs a <head> tag ",
+         "for spigot to put a <base href> in.", call. = FALSE)
+  }
+  end <- open + attr(open, "match.length") - 1L
+  paste0(substr(head, 1L, end), "<base href=\"", base, "\" data-spigot>",
+         substr(head, end + 1L, nchar(head)))
+}
+
 # ---- routing -------------------------------------------------------------------------
 
-PAGE_PATH <- "^/([A-Za-z0-9._~-]+)?$"
+PAGE_PATH <- "^/([A-Za-z0-9._~-]+(/[A-Za-z0-9._~-]+)*)?$"
+
+is_page_path <- function(path) {
+  grepl(PAGE_PATH, path) & !grepl("(^|/)\\.+(/|$)", path) &
+    !strsplit_first(path) %in% reserved_prefixes
+}
+
+strsplit_first <- function(path) vapply(strsplit(path, "/", fixed = TRUE),
+                                         function(x) x[2] %||% "", character(1))
+
+# "../" once per level below the top: the <base href> that points a page at
+# the app root, or NULL for a top-level page.
+base_href <- function(path) {
+  depth <- lengths(regmatches(path, gregexpr("/", path, fixed = TRUE))) - 1L
+  if (depth > 0) strrep("../", depth)
+}
 
 # `pages` as spigot_app() takes it: one page (served at "/") or a named list
 # of them. A page is a spigot_page or anything shiny::shinyApp() takes as ui.
@@ -221,17 +262,22 @@ as_pages <- function(pages) {
     pages <- list("/" = pages)
   }
   paths <- names(pages)
-  bad <- !grepl(PAGE_PATH, paths) | sub("^/", "", paths) %in% reserved_prefixes
+  bad <- !is_page_path(paths)
   if (any(bad)) {
-    stop("Page path \"", paths[bad][1], "\" is not allowed. A path is \"/\" or one ",
-         "segment such as \"/about\": a leading slash, no trailing slash, only letters, ",
-         "digits, '.', '_', '~' or '-', and not /session or /shared.", call. = FALSE)
+    stop("Page path \"", paths[bad][1], "\" is not allowed. A path is \"/\" or segments ",
+         "such as \"/about\" or \"/docs/intro\": a leading slash, no trailing slash, only ",
+         "letters, digits, '.', '_', '~' or '-' in each segment, no \".\" or \"..\", and ",
+         "not under /session or /shared.", call. = FALSE)
   }
   if (anyDuplicated(paths)) {
     stop("Page path \"", paths[duplicated(paths)][1], "\" appears more than once.", call. = FALSE)
   }
   for (p in paths) {
     if (is.null(pages[[p]])) stop("The page at \"", p, "\" is NULL.", call. = FALSE)
+    if (!is.null(base_href(p)) && !inherits(pages[[p]], "spigot_page")) {
+      stop("The page at \"", p, "\" must be a spigot_page(): Shiny UI below the top level ",
+           "would load Shiny's scripts from the wrong place.", call. = FALSE)
+    }
   }
   pages
 }
@@ -242,13 +288,13 @@ page_router <- function(pages) {
   force(pages)
   function(req) {
     path <- req$PATH_INFO %||% "/"
-    page <- if (grepl(PAGE_PATH, path)) pages[[path]]
-    if (!is.null(page)) return(render_page(page, req))
+    page <- pages[[path]]
+    if (!is.null(page)) return(render_page(page, req, base_href(path)))
     if (path == "/reactlog" || startsWith(path, "/reactlog/")) return(NULL)
     trimmed <- sub("/$", "", path)
-    if (grepl("^/[^/]+/$", path) && !is.null(pages[[trimmed]])) {
+    if (trimmed != path && trimmed != "/" && !is.null(pages[[trimmed]])) {
       # Relative, so it stays right under a proxy subpath.
-      target <- paste0("../", substring(trimmed, 2L), req$QUERY_STRING %||% "")
+      target <- paste0("../", basename(trimmed), req$QUERY_STRING %||% "")
       return(shiny::httpResponse(301L, content_type = "text/plain; charset=UTF-8",
                                  content = "Moved", headers = list(Location = target)))
     }
@@ -256,8 +302,8 @@ page_router <- function(pages) {
   }
 }
 
-render_page <- function(page, req) {
-  if (inherits(page, "spigot_page")) return(page$render(req))
+render_page <- function(page, req, base = NULL) {
+  if (inherits(page, "spigot_page")) return(page$render(req, base))
   if (is.function(page)) call_with_req(page, req) else page
 }
 

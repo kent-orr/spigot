@@ -6,16 +6,18 @@
 #'
 #' @section Pages:
 #' `pages` is one page, served at `/`, or a named list of them, such as
-#' `list("/" = home, "/about" = about)`. A path is `/` or a single segment
-#' (`/about`, not `/docs/intro`), so relative URLs in every page resolve
-#' from the app's root. `/about/` redirects to `/about`, and any other path
-#' that is not a page or a file gets a `404` HTML page. Only `GET` requests
-#' reach a page.
+#' `list("/" = home, "/about" = about, "/docs/intro" = intro)`. A path is
+#' `/` or one or more segments, not under the API `prefix`. Relative URLs in
+#' every page resolve from the app's root (see [spigot_page()]).
+#' `/about/` redirects to `/about`, and any other path that is not a page or
+#' a file gets a `404` HTML page. Only `GET` requests reach a page.
 #'
-#' A page is usually a [spigot_page()]: a hand-written HTML template. It can
-#' also be anything [shiny::shinyApp()] accepts as `ui`, such as
-#' [shiny::fluidPage()], an [shiny::htmlTemplate()] document, or a
-#' `function(req)` returning one of those (or an [shiny::httpResponse()]).
+#' A page is usually a [spigot_page()]: a hand-written HTML template. A
+#' top-level page (`/`, `/about`) can also be anything [shiny::shinyApp()]
+#' accepts as `ui`, such as [shiny::fluidPage()], an [shiny::htmlTemplate()]
+#' document, or a `function(req)` returning one of those (or an
+#' [shiny::httpResponse()]). Below the top level, pages must be
+#' `spigot_page()`s.
 #'
 #'
 #' @section Sessions:

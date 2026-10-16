@@ -252,12 +252,70 @@ test_that("page paths are validated", {
   p <- spigot_page("<html><head></head><body></body></html>")
   expect_error(as_pages(list(p)), "named")
   expect_error(as_pages(list()), "at least one")
-  for (bad in c("about", "/about/", "/docs/intro", "", "/a b", "/session", "/shared")) {
-    expect_error(as_pages(stats::setNames(list(p), bad)), "path", info = bad)
+  bad <- c("about", "/about/", "", "/a b", "/session", "/shared", "/docs/", "/docs//x",
+           "//x", "/docs/../x", "/./x", "/..", "/docs/.", "/session/x", "/shared/x")
+  for (path in bad) {
+    expect_error(as_pages(stats::setNames(list(p), path)), "path", info = path)
   }
   expect_error(as_pages(list("/a" = p, "/a" = p)), "more than once")
   expect_error(as_pages(list("/" = NULL)), "page")
-  expect_identical(names(as_pages(list("/" = p, "/x.y-z_~" = p))), c("/", "/x.y-z_~"))
+  ok <- c("/", "/x.y-z_~", "/docs/intro", "/a/b/c", "/v1.2/..x")
+  expect_identical(names(as_pages(stats::setNames(rep(list(p), length(ok)), ok))), ok)
+})
+
+test_that("a nested page must be a spigot_page()", {
+  for (page in list(shiny::fluidPage("x"), function(req) "x", shiny::tags$p("x"))) {
+    expect_error(as_pages(list("/docs/intro" = page)), "spigot_page")
+  }
+})
+
+# ---- nested pages ----------------------------------------------------------------
+
+nested_doc <- "<!DOCTYPE html><html><head lang=\"en\"><title>n</title></head><body></body></html>"
+
+test_that("a nested page gets a <base> to the app root, first in <head>", {
+  p <- spigot_page(nested_doc)
+  route <- page_router(list("/" = p, "/docs/intro" = p, "/a/b/c" = p))
+  expect_no_match(as.character(route(fake_req("GET", "/"))), "<base", fixed = TRUE)
+  expect_match(as.character(route(fake_req("GET", "/docs/intro"))),
+               "<head lang=\"en\"><base href=\"../\" data-spigot><title>n</title>", fixed = TRUE)
+  expect_match(as.character(route(fake_req("GET", "/a/b/c"))),
+               "<head lang=\"en\"><base href=\"../../\" data-spigot><title>", fixed = TRUE)
+})
+
+test_that("a cached page gets the right <base> at every path", {
+  p <- spigot_page(nested_doc, cache = TRUE)
+  route <- page_router(list("/" = p, "/docs/intro" = p))
+  for (i in 1:2) {
+    expect_no_match(as.character(route(fake_req("GET", "/"))), "<base", fixed = TRUE)
+    expect_match(as.character(route(fake_req("GET", "/docs/intro"))), "<base href=\"../\"",
+                 fixed = TRUE)
+  }
+})
+
+test_that("a nested page with its own <base> keeps it", {
+  p <- spigot_page("<html><HEAD><BASE href=\"/x/\"></HEAD><body></body></html>")
+  html <- as.character(page_router(list("/docs/intro" = p))(fake_req("GET", "/docs/intro")))
+  expect_no_match(html, "data-spigot", fixed = TRUE)
+  expect_match(html, "<BASE href=\"/x/\">", fixed = TRUE)
+})
+
+test_that("a nested page without a <head> tag is an error", {
+  p <- spigot_page("<html><title>t</title></head><body></body></html>")
+  route <- page_router(list("/" = p, "/docs/intro" = p))
+  expect_match(as.character(route(fake_req("GET", "/"))), "<title>t</title>", fixed = TRUE)
+  expect_error(route(fake_req("GET", "/docs/intro")), "<head>")
+})
+
+test_that("nested paths route, redirect and 404 like top-level ones", {
+  p <- spigot_page(nested_doc)
+  route <- page_router(list("/docs/intro" = p))
+  r <- route(fake_req("GET", "/docs/intro/", query = "q=1"))
+  expect_identical(r$status, 301L)
+  expect_identical(r$headers$Location, "../intro?q=1")
+  for (path in c("/docs", "/docs/", "/docs/nope", "/docs/intro/x", "/docs/nope/")) {
+    expect_identical(route(fake_req("GET", path))$status, 404L, info = path)
+  }
 })
 
 # ---- integration ---------------------------------------------------------------------
@@ -336,6 +394,26 @@ test_that("a live app still serves its API, www/ files, Shiny UI pages and data 
                    hit_text(hit(paste0(srv$url, "/cached"))))
 })
 
+test_that("a live app serves nested pages with a <base> and Shiny once", {
+  srv <- start_app(test_path("apps", "page"))
+  for (path in c("/docs/intro", "/docs/a/b")) {
+    r <- hit(paste0(srv$url, path))
+    expect_identical(httr2::resp_status(r), 200L, info = path)
+    html <- hit_text(r)
+    base <- if (path == "/docs/intro") "../" else "../../"
+    expect_match(html, paste0("<head><base href=\"", base, "\" data-spigot>"), fixed = TRUE,
+                 info = path)
+    expect_identical(scripts(html, "shiny.min.js"), 1L)
+    expect_identical(scripts(html, "spigot.js"), 1L)
+  }
+  r <- httr2::request(paste0(srv$url, "/docs/intro/")) |>
+    httr2::req_options(followlocation = FALSE) |>
+    httr2::req_error(is_error = function(r) FALSE) |>
+    httr2::req_perform()
+  expect_identical(httr2::resp_header(r, "Location"), "../intro")
+  expect_identical(httr2::resp_status(hit(paste0(srv$url, "/docs"))), 404L)
+})
+
 test_that("a single page is served at / by a live app", {
   srv <- start_app(function() {
     spigot::spigot_app(
@@ -374,4 +452,47 @@ test_that("a trailing slash lands on the page, also under a proxy subpath", {
   expect_identical(js(tab, "location.pathname"), "/sub/app/about")
   expect_identical(js(tab, "document.title"), "about")
   expect_identical(js(tab, "spigot.get('hello').then(r => r.msg)"), "hi")
+})
+
+test_that("nested pages load Shiny, reach the API and resolve URLs from the app root", {
+  skip_if_no_chrome()
+  srv <- start_app(test_path("apps", "page"))
+  for (path in c("/docs/intro", "/docs/a/b")) {
+    tab <- new_tab(paste0(srv$url, path))
+    expect_identical(js(tab, "spigot.get('hello').then(r => r.msg)"), "hi", info = path)
+    expect_identical(js(tab, "location.pathname"), path)
+    expect_identical(js(tab, "document.getElementById('to-about').href"),
+                     paste0(srv$url, "/about"), info = path)
+    expect_identical(js(tab, "fetch('hello.txt').then(r => r.text())"), "static hello\n",
+                     info = path)
+    tab$close()
+  }
+})
+
+test_that("#fragment links on a nested page stay on the page", {
+  skip_if_no_chrome()
+  srv <- start_app(test_path("apps", "page"))
+  tab <- new_tab(paste0(srv$url, "/docs/intro?x=1"))
+  js(tab, "document.getElementById('to-sec').click(); true")
+  expect_true(eventually(function() js(tab, "location.hash") == "#sec", timeout = 3))
+  expect_identical(js(tab, "location.pathname + location.search"), "/docs/intro?x=1")
+  expect_gt(js(tab, "window.scrollY"), 1000)
+  # Still the same document: the session is unchanged.
+  expect_identical(js(tab, "spigot.get('hello').then(r => r.msg)"), "hi")
+
+  # A link the page handles itself is left alone.
+  js(tab, "document.getElementById('blocked').click(); true")
+  Sys.sleep(0.2)
+  expect_identical(js(tab, "location.hash"), "#sec")
+})
+
+test_that("nested pages work under a proxy subpath, trailing slash included", {
+  skip_if_no_chrome()
+  srv <- start_app(test_path("apps", "page"))
+  proxy <- start_proxy(srv$url)
+  tab <- new_tab(paste0(proxy$url, "docs/intro/"))
+  expect_identical(js(tab, "location.pathname"), "/sub/app/docs/intro")
+  expect_identical(js(tab, "document.title"), "intro")
+  expect_identical(js(tab, "spigot.get('hello').then(r => r.msg)"), "hi")
+  expect_identical(js(tab, "document.getElementById('to-about').href"), paste0(proxy$url, "about"))
 })

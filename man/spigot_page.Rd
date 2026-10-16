@@ -49,9 +49,20 @@ whisker's \code{name.mustache} files).
 
 \section{Relative URLs}{
 
-Pages live one level deep (\code{/}, \verb{/about}), so relative URLs in a page,
-Shiny's own included, resolve from the app's root. A request for
-\verb{/about/} is redirected to \verb{/about} for the same reason.
+Relative URLs in every page resolve from the app's root: \code{href="about"},
+\code{href="docs/intro"} and \code{src="logo.png"} (a \verb{www/} file) mean the same
+on every page, and so do Shiny's own script URLs. For a page below the
+top level (\verb{/docs/intro}), spigot puts \verb{<base href="../">} (one \verb{../}
+per level) first in its \verb{<head>} to do this, so such a template needs a
+\verb{<head>} tag. A template with its own \verb{<base>} keeps it.
+
+A \verb{<base>} would also send \code{href="#section"} links to the app root, so
+\code{spigot.js} keeps plain clicks on them on the page. Other URLs relative
+to the page itself, such as \code{href="?tab=2"}, resolve from the root too:
+write the page's path (\code{href="docs/intro?tab=2"}).
+
+A request for \verb{/about/} is redirected to \verb{/about}, where the relative
+URLs resolve as intended.
 }
 
 \examples{

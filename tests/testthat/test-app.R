@@ -127,6 +127,11 @@ test_that("spigot_app() refuses a page the API would hide", {
                "/api")
   expect_error(spigot_app(pages = list("/rpc" = p), api = test_router(), prefix = "/rpc"),
                "/rpc")
+  expect_error(spigot_app(pages = list("/api/x" = p), api = test_router()), "/api/x")
+  expect_error(spigot_app(pages = list("/v1/api/x" = p), api = test_router(),
+                          prefix = "/v1/api"), "/v1/api/x")
+  expect_s3_class(spigot_app(pages = list("/v1/x" = p), api = test_router(), prefix = "/v1/api"),
+                  "shiny.appobj")
   # A page that only shares the prefix's first characters is fine.
   expect_s3_class(spigot_app(pages = list("/apis" = p), api = test_router()), "shiny.appobj")
 })

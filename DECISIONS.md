@@ -357,6 +357,9 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
 
 ## 2026-10-16 — M5: page paths are one segment; a trailing slash redirects
 
+> Path rule superseded by "nested pages get a `<base href>`" below; the redirect and routing
+> notes still hold.
+
 - Shiny writes its dependency URLs relative (`jquery-3.7.1/jquery.min.js`). A page at
   `/docs/intro`, or at `/about/`, resolves them under `/docs/` or `/about/` and loads no Shiny,
   so no session and no API. The M3 entry suggested a `<base href>`. **Rejected for now:**
@@ -400,3 +403,31 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   render the same HTML; the unit test counts `render_whisker()` calls instead.
 - The minimal example now uses `spigot_page("index.html")`; its template lost
   `{{ headContent() }}`.
+
+## 2026-10-16 — M5: nested pages get a `<base href>` (supersedes one-segment paths)
+
+- Nested pages matter for sites (`/docs/intro`), so the one-segment rule went. A path is `/` or
+  one or more segments of `[A-Za-z0-9._~-]`, with no `.`/`..` segment, not under `/session`,
+  `/shared` or the API prefix.
+- What breaks at depth, checked in shiny.js 1.14.0: **only relative asset URLs.** The websocket
+  URL is built from `location.pathname` (`createSocket()`: pathname + `/` + `websocket/`), so a
+  page at `/about` already connects to `/about/websocket/`, and Shiny's server accepts any ws
+  path but `/autoreload/`. Hosts that set `Shiny.createSocket` (Shiny Server's SockJS, Connect)
+  replace this; not verified on a real deployment (same caveat as the M2 origin-guard entry).
+- **Decision:** a `spigot_page()` served below the top level gets `<base href="../" data-spigot>`
+  (one `../` per level, relative so it works under a proxy subpath) right after its `<head>`
+  tag, before anything else in the head. Relative URLs then resolve from the app root on every
+  page; top-level pages get no base and are unchanged. A template with its own `<base>` keeps
+  it. No `<head>` tag at depth → render error (inserting before `<!DOCTYPE>` would break the
+  page). The cache holds the HTML before the base, since one page object can be served at
+  several depths.
+- **Nested pages must be `spigot_page()`s.** For tag-based Shiny UI, `renderPage()` writes
+  Shiny's scripts before any `tags$head()` content (checked), so a base added there comes too
+  late. Error at `spigot_app()` time.
+- **Fragment links:** with a base, `href="#sec"` resolves to the app root (the e2e test saw the
+  click land on `/`). `spigot.js` adds one delegated `click` listener: when `base[data-spigot]`
+  exists, a plain left click on `<a href="#...">` (no modifier, no other `target`, not already
+  `defaultPrevented`) sets `location.hash` instead. Middle-click/new-tab on such a link still
+  opens the root, and `href="?tab=2"` still resolves from the root; both documented in
+  `?spigot_page`.
+- Trailing slash at any depth: `/docs/intro/` → 301 `../intro` (plus query). `//` is a 404.
