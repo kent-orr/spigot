@@ -1,0 +1,64 @@
+# R CMD check on R release and oldrel, against shiny from CRAN and from
+# GitHub main (mount.R depends on shiny.appobj internals; PLAN §4.1), and
+# against the oldest shiny that DESCRIPTION allows.
+# Cells with `chrome: true` install Chrome for Testing and set
+# SPIGOT_REQUIRE_CHROME, so their e2e tests fail rather than skip without it.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+name: R-CMD-check.yaml
+
+permissions: read-all
+
+jobs:
+  R-CMD-check:
+    runs-on: ubuntu-latest
+    name: R ${{ matrix.r }}, shiny ${{ matrix.shiny }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - {r: release,  shiny: CRAN,   chrome: true,  pkgs: "any::rcmdcheck"}
+          - {r: oldrel-1, shiny: CRAN,   chrome: false, pkgs: "any::rcmdcheck"}
+          - {r: release,  shiny: main,   chrome: true,  pkgs: "any::rcmdcheck, github::rstudio/shiny"}
+          # The oldest shiny in DESCRIPTION (DECISIONS.md, M7).
+          - {r: release,  shiny: 1.11.0, chrome: true,  pkgs: "any::rcmdcheck, shiny@1.11.0"}
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      NOT_CRAN: true
+      SPIGOT_REQUIRE_CHROME: ${{ matrix.chrome }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: ${{ matrix.r }}
+          use-public-rspm: true
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: ${{ matrix.pkgs }}
+          needs: check
+
+      - name: Install Chrome for Testing
+        if: matrix.chrome
+        run: chromote::chrome_versions_add("latest-stable", "chrome-headless-shell")
+        shell: Rscript {0}
+
+      - name: Show versions
+        run: for (p in c("shiny", "plumber", "httpuv")) cat(p, format(packageVersion(p)), "\n")
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual", "--compression=gzip")'

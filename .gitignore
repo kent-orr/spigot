@@ -4,3 +4,4 @@
 .Ruserdata
 *.Rcheck/
 spigot_*.tar.gz
+docs

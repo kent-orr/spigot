@@ -26,6 +26,10 @@
 > M6 complete (2026-10-16): `spigot_trigger()` passes the value by reference, so `input[[name]]`
 > is `identical()` to it; F21–F22 added (DECISIONS.md).
 
+> M7 in progress (2026-10-16): examples, vignettes (plus `why-spigot` and `client`), pkgdown
+> site for GitHub Pages and CI are written; `shiny (>= 1.11.0)`, because older shiny breaks
+> hand-written forms (DECISIONS.md). Left: first CI run, Pages setup, tag.
+
 ## 1. Goal
 
 Build Shiny "sites" where:
@@ -154,7 +158,7 @@ future 1.70.0, httpuv 1.6.17, plumber 1.3.3, chromote 0.5.1 + Chrome for Testing
 - Replace `app$httpHandler` with a wrapper. Requests matching `^{prefix}(/|$)` have the prefix moved from `PATH_INFO` to `SCRIPT_NAME` (same trick as Shiny's own `routeHandler()`), then go to `pr$call(req)`. The result (value or promise) is chained with `rook_to_httpResponse()` (F4, F12).
 - Everything else returns `NULL` from the wrapper → falls through to the original handler and Shiny's static/resource handlers (F2).
 - The prefix is excluded from httpuv static serving at startup (F16), or API POSTs in an app dir with `www/` get 400.
-- **Risk:** depends on the `shiny.appobj` structure (F1). Mitigate by: asserting the structure at `spigot_app()` time and failing loudly; pinning `shiny (>= 1.14.0)` initially and walking the lower bound back in CI; keeping `mount.R` the only file touching it.
+- **Risk:** depends on the `shiny.appobj` structure (F1). Mitigate by: asserting the structure at `spigot_app()` time and failing loudly; pinning `shiny (>= 1.14.0)` initially and walking the lower bound back in CI (now `>= 1.11.0`, DECISIONS.md M7); keeping `mount.R` the only file touching it.
 
 ### 4.2 Session binding
 
@@ -455,9 +459,10 @@ A module's session namespaces `name`. The vignette draft is `?spigot_trigger`; M
 3. Vignettes: `getting-started.Rmd` (walks `minimal` then `site`), `reactivity.Rmd` (§2 expanded, with the three channels and when to use each, plus the concurrency warning from §4.6).
 4. `devtools::document()`; every exported function has `@param`, `@return`, `@examples` (wrapped in `\dontrun{}` where a server is needed).
 5. `devtools::check()` clean: 0 errors, 0 warnings, 0 notes other than the usual "new submission".
-6. CI (`.github/workflows/R-CMD-check.yaml`): matrix of R release / oldrel × shiny CRAN / shiny GitHub `main`, plumber CRAN. Chrome via `browser-actions/setup-chrome` or `chromote::local_chrome_version()` in a setup step. e2e tests `skip_if_no_chrome()` so a matrix cell without Chrome still runs unit + integration.
-7. Lower the `shiny` version pin: add a matrix cell with the oldest shiny that passes (try 1.8.0; F1/F4/F9 have been stable since well before that). Pin to the oldest green version.
-8. Tag `v0.1.0`.
+6. pkgdown site (`_pkgdown.yml`, `.github/workflows/pkgdown.yaml`) deployed to GitHub Pages at `https://kent-orr.github.io/spigot/`; README and NEWS.
+7. CI (`.github/workflows/R-CMD-check.yaml`): matrix of R release / oldrel × shiny CRAN / shiny GitHub `main`, plumber CRAN. Chrome via `browser-actions/setup-chrome` or `chromote::local_chrome_version()` in a setup step. e2e tests `skip_if_no_chrome()` so a matrix cell without Chrome still runs unit + integration.
+8. Lower the `shiny` version pin: add a matrix cell with the oldest shiny that passes (try 1.8.0; F1/F4/F9 have been stable since well before that). Pin to the oldest green version.
+9. Tag `v0.1.0`.
 
 ## 7. Open questions
 

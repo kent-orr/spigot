@@ -1,0 +1,179 @@
+---
+title: "Push, reactivity and concurrency"
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Push, reactivity and concurrency}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(collapse = TRUE, comment = "#>")
+example_file <- function(...) system.file("examples", ..., package = "spigot", mustWork = TRUE)
+```
+
+A spigot page can exchange data with R in three ways. Most apps need only the first.
+
+| Channel | Direction | Use it for | R side | Page side |
+|---|---|---|---|---|
+| HTTP | page → R → page | Queries, commands, forms, loading data | plumber endpoints | `spigot.get()`, `spigot.post()`, ... |
+| Push | R → page | Live updates, progress, events another tab caused | `spigot_emit()`, `spigot_broadcast()` | `spigot.on()` |
+| Bridge | HTTP → reactive graph | An API call that should update reactive code in the server function | `spigot_trigger()` | nothing: spigot.js handles it |
+
+Rules of thumb:
+
+* **Start with HTTP.** A page asks; R answers. Shiny hosts the app and gives each tab a
+  session, and that is all most apps need from it.
+* **Push when R knows something the page did not ask for**: another user changed the data,
+  a long job made progress, a timer fired.
+* **Use the bridge only when the server function owns the view**: Shiny outputs, or
+  reactive code that should run when an endpoint is called. It is optional; nothing else in
+  spigot depends on it.
+
+The `live` example uses all three. Run it with `spigot::run_example("live")` and open it in
+two tabs.
+
+## Push: `spigot_emit()` and `spigot_broadcast()`
+
+`spigot_emit(session, event, data)` sends an event to one tab: the session of the request,
+from `spigot_session(req)` in an endpoint, or the `session` of a server function.
+`spigot_broadcast(event, data)` sends it to every open tab. The page listens with
+`spigot.on()`:
+
+```js
+const stop = spigot.on("cart:changed", (cart, event) => renderCart(cart));
+// later, if needed:
+stop();
+```
+
+```r
+#* @post /cart/add
+function(req, sku) {
+  s <- spigot::spigot_session(req)
+  cart <- add_to_cart(s$userData$cart_id, sku)
+  spigot::spigot_emit(s, "cart:changed", cart)
+  cart
+}
+```
+
+`data` is serialised with `spigot_json()`, so it arrives in the page in the same shape as an
+API reply. Events travel over the tab's Shiny websocket.
+
+`spigot_broadcast()` takes `except`, sessions to skip, and `filter`, a function of a session
+that returns `TRUE` to send to it. Together they cover "tell everyone else" and rooms:
+
+```r
+#* @post /chat/say
+function(req, text) {
+  s <- spigot::spigot_session(req)
+  room <- s$userData$room
+  spigot::spigot_broadcast("chat:message", list(room = room, text = text),
+    except = s, filter = function(x) identical(x$userData$room, room))
+}
+```
+
+Things to know about push:
+
+* **A push can beat the reply.** R sends an event as soon as `spigot_emit()` is called, while
+  the endpoint is still running, so the page can receive it before the HTTP reply to the same
+  request. Do not write page code that assumes the reply comes first. The `live` example
+  keeps the highest count it has seen, whichever message carries it.
+* **No replay.** Events that arrive before the page calls `spigot.on()` for them are dropped.
+  Register listeners when the script loads, and load the current state over HTTP.
+* **One R process.** `spigot_broadcast()` reaches the open tabs served by this R process. If
+  the server runs several processes for one app, tabs in other processes do not get the
+  event. Pushing across processes needs an outside relay, such as Redis or Postgres
+  `LISTEN/NOTIFY`, and spigot does not provide one.
+* **Push from the app's process.** A `future` worker is another R process and has no
+  sessions. Emit from the promise's `then()`, which runs in the app's process.
+
+## The bridge: `spigot_trigger()`
+
+`spigot_trigger(session, name, value)` sets `input[[name]]` in a tab's session, so the
+server function's reactive code runs as if the page had changed an input:
+
+```r
+server <- function(input, output, session) {
+  mine <- reactiveVal(0L)
+  observeEvent(input$clicked, mine(mine() + input$clicked))
+  output$mine <- renderText(mine())
+}
+```
+
+A hand-written page shows a Shiny output with an element that has the output's `id` and
+class, here `<div id="mine" class="shiny-text-output"></div>`. Shiny binds it as it would a
+`textOutput()`. Other outputs use their own classes: `shiny-html-output` for `uiOutput()`,
+`shiny-plot-output` for `plotOutput()`, and so on.
+
+How it behaves:
+
+* **The value never leaves R.** spigot keeps `value` in the session and sends the page only
+  an id; the page sets the input to the id and spigot swaps the value back in. So
+  `input[[name]]` is `identical()` to `value`: data frames, factors, dates and `NA` arrive
+  unchanged.
+* **It runs after the endpoint returns,** in Shiny's normal reactive flush, and only if the
+  tab is open. It takes one more trip over the websocket, about as long as any Shiny input
+  change.
+* **Every trigger fires.** Observers run even when the value equals the last one.
+* **Modules.** Called with a module's `session`, `name` is namespaced like the module's
+  own inputs.
+
+If you only need the page to show new data, return it or push it; there is no need to go
+through the reactive graph.
+
+## The live example
+
+`app.R` keeps the shared state in an environment that the endpoints and the server function
+both see, and broadcasts the number of open tabs when one opens or closes:
+
+```{embed, file = example_file("live", "app.R")}
+```
+
+The increment endpoint uses all three channels: the reply carries the new count, a broadcast
+tells every tab, and a trigger tells the calling tab's server function.
+
+```{embed, file = example_file("live", "api.R")}
+```
+
+The page's script listens for both events, loads the current state once, and calls the API
+from its buttons:
+
+```{embed, file = example_file("live", "www", "app.js")}
+```
+
+## Concurrency
+
+A Shiny app runs in one R process with one thread. **While an endpoint runs, nothing else in
+that process does**: no other request, no other tab's reactive code, no pushes. A query that
+takes two seconds makes every tab wait two seconds.
+
+For anything slower than about 100 ms:
+
+* **Return a promise.** spigot replies when it resolves, and the process serves other
+  requests meanwhile. `promises::future_promise()` runs the work in a
+  [future](https://future.futureverse.org/) worker; [mirai](https://mirai.r-lib.org/) works
+  too. The `site` example's fit endpoint is a complete example.
+
+  ```r
+  #* @post /report
+  function(req, month) {
+    s <- spigot::spigot_session(req)
+    promises::future_promise({
+      build_report(month)          # runs in a worker
+    }) |>
+      promises::then(function(report) {
+        # back in the app's process: sessions and push work here
+        spigot::spigot_emit(s, "report:ready", list(month = month))
+        report
+      })
+  }
+  ```
+
+* **Send the worker what it needs.** A worker is another R process: it has no sessions and
+  none of the app's in-memory state. Pass data in, and use the result in `then()`.
+* **Wait without blocking.** To wait for something, resolve a promise from
+  `later::later()` instead of calling `Sys.sleep()`. The `minimal` example's `/slow`
+  endpoint does this.
+* **Give the page a timeout.** `spigot.get(path, query, {timeout: 5000})` rejects with a
+  `SpigotError` whose `status` is `0` if no reply arrives within five seconds, and aborts the
+  request.

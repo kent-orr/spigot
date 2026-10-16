@@ -42,3 +42,11 @@ test_that("fake_req() without a body has an empty input", {
   expect_identical(req$rook.input$read(), raw(0))
   expect_null(req$CONTENT_TYPE)
 })
+
+test_that("skip_if_no_chrome() fails instead of skipping when CI requires Chrome", {
+  skip_if_not_installed("chromote")
+  withr::local_envvar(NOT_CRAN = "true", SPIGOT_REQUIRE_CHROME = "")
+  expect_condition(skip_if_no_chrome(path = NULL), class = "skip")
+  withr::local_envvar(SPIGOT_REQUIRE_CHROME = "true")
+  expect_error(skip_if_no_chrome(path = NULL), "SPIGOT_REQUIRE_CHROME")
+})

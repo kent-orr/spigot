@@ -465,3 +465,50 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   p95). Observers run *after* the endpoint returns, and only while the page is open.
 - The reactivity vignette draft is `?spigot_trigger` (as M4 used `?spigot_emit`); M7 writes
   the vignette.
+
+## 2026-10-16 — M7: examples
+
+- `live`: a counter shared by every tab. One endpoint uses all three channels: the HTTP reply,
+  `spigot_broadcast("count")` to every tab, and `spigot_trigger(s, "clicked")` into the
+  caller's server function, which renders a Shiny text output inside the hand-written page
+  (`<div id="mine" class="shiny-text-output">`). The page keeps the highest count seen,
+  because a push can beat the reply (M0 step 5). Shared state is an environment in `app.R`;
+  plumber evaluates `api.R` in `app.R`'s environment, so the endpoints see it.
+- `site`: three top-level pages from `pages/`, sharing `head`, `nav` and `footer` partials
+  (a partial may hold `</head>`), all `cache = TRUE`. `/cars` is rendered in R with all 32
+  `mtcars` rows, then filtered through `GET api/cars`. `POST api/fit` bootstraps a slope in a
+  `future::multisession` worker with `future_promise(seed = TRUE)` and returns both PIDs, so
+  the test proves the work ran in another process. `future` stays in Suggests; the smoke
+  test skips the example without it (`needs` in `test-examples.R`).
+- Smoke tests take `(url, headers, session)`; `session` is `open_session()`'s, so pushes and
+  triggers are checked without a browser. Each new example also has one chromote test.
+
+## 2026-10-16 — M7: docs and pkgdown
+
+- Vignettes: `why-spigot`, `getting-started` (walks `minimal`, then `site`), `reactivity`
+  (the three channels, the `live` example, concurrency), and `client` (the spigot.js
+  reference, which until now was only `?spigot_dependency`). Example files are shown with
+  knitr's `embed` engine from `system.file("examples", ...)`, so the vignettes cannot drift
+  from the shipped examples.
+- pkgdown site at `https://kent-orr.github.io/spigot/`, built by `.github/workflows/pkgdown.yaml`
+  and deployed to the `gh-pages` branch. "Get started" points at `getting-started` (pkgdown
+  only does that by itself for a vignette named after the package).
+- PLAN §4.6 `spigot_options(timeout =)` was never built; spigot.js has only the per-call
+  `timeout` option, and the docs say so. Deferred: no default timeout in 0.1.0.
+
+## 2026-10-16 — M7: CI and the oldest shiny
+
+- `skip_if_no_chrome()` fails instead of skipping when `SPIGOT_REQUIRE_CHROME=true`, which
+  the CI cells that install Chrome for Testing set (PLAN §8, "e2e silently skipped").
+- **shiny before 1.11.0 breaks hand-written forms.** Its `initShiny()` treats *any*
+  `button[type=submit]` on the page as a `submitButton()`: it calls `preventDefault()` on the
+  click, so the form's `submit` event never fires, and it defers every input. Fixed in
+  shiny 1.11.0 (#4209: only `.shiny-submit-button`). Found by running the suite against
+  shiny 1.8.0: the `minimal` and `site` browser tests fail and `live` (plain buttons) passes.
+- shiny's `httpResponse()` adds `X-Content-Type-Options: nosniff` only from 1.14.0 (before
+  that, `X-UA-Compatible`). spigot now sets `nosniff` itself on API responses
+  (`api_response()` in `rook.R`).
+- Full suite (965 expectations, Chrome included) against older shiny in a scratch library:
+  1.8.0 and 1.10.0 fail only the `minimal`/`site` browser tests (the submit-button bug above)
+  once `nosniff` is spigot's; **1.11.0 passes everything**. `DESCRIPTION` now has
+  `shiny (>= 1.11.0)`, and CI has a cell pinned to 1.11.0. F1, F4 and F9 hold back to 1.8.0.

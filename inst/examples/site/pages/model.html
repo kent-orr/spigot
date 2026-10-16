@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+{{> head}}
+<body>
+  {{> nav}}
+  <main>
+    <h1>Model</h1>
+    <p>
+      Fit <code>lm(mpg ~ x)</code> and bootstrap a 95% interval for the slope. The
+      endpoint returns a <code>promises::future_promise()</code>: the resampling runs in
+      another R process, and this app keeps answering other requests meanwhile.
+    </p>
+    <form id="fit" class="row">
+      <label>Predictor
+        <select id="x">
+          {{#predictors}}
+          <option value="{{name}}">{{label}}</option>
+          {{/predictors}}
+        </select>
+      </label>
+      <label>Resamples <input id="reps" value="2000" inputmode="numeric" size="5" autocomplete="off"></label>
+      <button type="submit">Fit</button>
+    </form>
+    <pre class="out" id="fit-out">Press Fit.</pre>
+  </main>
+  {{> footer}}
+  <script src="model.js"></script>
+</body>
+</html>

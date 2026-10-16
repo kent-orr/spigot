@@ -1,7 +1,9 @@
 # Chrome for the e2e tests. Uses a browser on the PATH if there is one, else
 # the Chrome for Testing headless shell in chromote's cache (DECISIONS.md,
 # M0 step 0). Nothing is downloaded here: when no browser is found the test
-# is skipped with instructions.
+# is skipped with instructions, or fails if the SPIGOT_REQUIRE_CHROME
+# environment variable is "true" (set in CI cells that install Chrome, so
+# the e2e tests cannot be skipped there without anyone noticing).
 
 chrome_path <- function() {
   found <- tryCatch(suppressMessages(chromote::find_chrome()), error = function(e) NULL)
@@ -15,11 +17,13 @@ chrome_path <- function() {
   if (file.exists(path)) path else NULL
 }
 
-skip_if_no_chrome <- function() {
+skip_if_no_chrome <- function(path = chrome_path()) {
   testthat::skip_on_cran()
   testthat::skip_if_not_installed("chromote")
-  path <- chrome_path()
   if (is.null(path)) {
+    if (identical(Sys.getenv("SPIGOT_REQUIRE_CHROME"), "true")) {
+      stop("No Chrome found, and SPIGOT_REQUIRE_CHROME is \"true\".", call. = FALSE)
+    }
     testthat::skip(paste0(
       "no Chrome found; install one with chromote::local_chrome_version(",
       "\"latest-stable\", binary = \"chrome-headless-shell\")"

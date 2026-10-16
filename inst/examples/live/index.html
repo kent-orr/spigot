@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>spigot · live example</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>spigot <span>live example</span></h1>
+      <p>
+        One count, shared by every tab that has this page open.
+        <strong>Open the page in a second tab</strong> and press the buttons in either.
+        The page talks to R in three ways; see <code>www/app.js</code>,
+        <code>api.R</code> and <code>app.R</code>.
+      </p>
+    </header>
+
+    <section class="card">
+      <div class="counter">
+        <div>
+          <div class="label">Count, all tabs</div>
+          <div class="big" id="count">…</div>
+        </div>
+        <div>
+          <div class="label">Open tabs</div>
+          <div class="big" id="tabs">…</div>
+        </div>
+        <div>
+          <div class="label">This tab's clicks</div>
+          <!-- A Shiny output: app.R's server function renders output$mine. -->
+          <div class="big shiny-text-output" id="mine"></div>
+        </div>
+      </div>
+      <div class="row">
+        <button id="plus-one" type="button">+1</button>
+        <button id="plus-five" type="button">+5</button>
+        <button id="plus-bad" type="button" class="secondary">+11 (rejected)</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>How each number gets here</h2>
+      <dl class="channels">
+        <dt>HTTP</dt>
+        <dd>
+          The buttons call <code>spigot.post("increment", {by})</code>. The reply holds
+          the new count. On load, <code>spigot.get("state")</code> reads the count and
+          the number of tabs.
+        </dd>
+        <dt>Push</dt>
+        <dd>
+          The endpoint calls <code>spigot_broadcast("count", ...)</code>, so every open
+          tab hears about every click through <code>spigot.on("count", ...)</code>. The
+          server function broadcasts <code>"tabs"</code> when a tab opens or closes.
+        </dd>
+        <dt>Bridge</dt>
+        <dd>
+          The endpoint also calls <code>spigot_trigger(session, "clicked", by)</code>.
+          That sets <code>input$clicked</code> in the calling tab's Shiny session, an
+          observer adds it up, and <code>renderText()</code> updates
+          <em>This tab's clicks</em>, a Shiny output in this hand-written page.
+        </dd>
+      </dl>
+    </section>
+
+    <section class="card">
+      <h2>Events received by this tab</h2>
+      <pre class="out" id="log">Waiting for events.</pre>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

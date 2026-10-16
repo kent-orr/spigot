@@ -7,6 +7,8 @@ Description: Mounts a 'plumber' router inside a 'shiny' app so hand-written
     HTML/JavaScript pages can call R endpoints on the same origin and port,
     while 'shiny' provides hosting, per-tab sessions and server push.
 License: MIT + file LICENSE
+URL: https://kent-orr.github.io/spigot/, https://github.com/kent-orr/spigot
+BugReports: https://github.com/kent-orr/spigot/issues
 Encoding: UTF-8
 Roxygen: list(markdown = TRUE)
 RoxygenNote: 7.3.3
@@ -19,7 +21,7 @@ Imports:
     later,
     plumber (>= 1.0.0),
     promises,
-    shiny (>= 1.14.0),
+    shiny (>= 1.11.0),
     utils,
     whisker
 Suggests: 
@@ -28,8 +30,11 @@ Suggests:
     curl,
     future,
     httr2,
+    knitr,
     pkgload,
+    rmarkdown,
     testthat (>= 3.0.0),
     websocket,
     withr
 Config/testthat/edition: 3
+VignetteBuilder: knitr

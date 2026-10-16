@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+{{> head}}
+<body>
+  {{> nav}}
+  <main>
+    <h1>A small site, served by Shiny</h1>
+    <p>
+      Every page here is a hand-written HTML template, rendered in R with
+      <code>spigot_page()</code>. The pages share a <code>&lt;head&gt;</code>, this nav bar
+      and the footer as whisker partials, and spigot adds Shiny's scripts and
+      <code>spigot.js</code> to each one.
+    </p>
+    <div class="cards">
+      <a class="card link" href="cars">
+        <h2>Cars</h2>
+        <p>
+          All {{n}} cars, rendered into the page in R. The filter form then calls
+          <code>GET api/cars</code> and redraws the table in the browser.
+        </p>
+      </a>
+      <a class="card link" href="model">
+        <h2>Model</h2>
+        <p>
+          Regress fuel economy on one of {{predictors}} predictors and bootstrap the
+          slope. <code>POST api/fit</code> runs the work in a <code>future</code> worker.
+        </p>
+      </a>
+    </div>
+  </main>
+  {{> footer}}
+</body>
+</html>

@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+{{> head}}
+<body>
+  {{> nav}}
+  <main>
+    <h1>Cars</h1>
+    <form id="filter" class="row">
+      <label>Model contains <input id="q" autocomplete="off" placeholder="e.g. merc"></label>
+      <label>At least <input id="min_mpg" inputmode="decimal" size="4" autocomplete="off"> mpg</label>
+      <button type="submit">Filter</button>
+      <span class="hint" id="status"></span>
+    </form>
+    <table id="cars">
+      <thead>
+        <tr><th>Model</th><th>mpg</th><th>Cylinders</th><th>Horsepower</th><th>Weight</th></tr>
+      </thead>
+      <tbody>
+        {{#rows}}
+        <tr data-car="{{model}}"><td>{{model}}</td><td>{{mpg}}</td><td>{{cyl}}</td><td>{{hp}}</td><td>{{wt}}</td></tr>
+        {{/rows}}
+      </tbody>
+    </table>
+  </main>
+  {{> footer}}
+  <script src="cars.js"></script>
+</body>
+</html>

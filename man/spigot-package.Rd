@@ -8,6 +8,15 @@
 \description{
 Mounts a 'plumber' router inside a 'shiny' app so hand-written HTML/JavaScript pages can call R endpoints on the same origin and port, while 'shiny' provides hosting, per-tab sessions and server push.
 }
+\seealso{
+Useful links:
+\itemize{
+  \item \url{https://kent-orr.github.io/spigot/}
+  \item \url{https://github.com/kent-orr/spigot}
+  \item Report bugs at \url{https://github.com/kent-orr/spigot/issues}
+}
+
+}
 \author{
 \strong{Maintainer}: Kent Orr \email{orr.kent@pawpawanalytics.com}
 

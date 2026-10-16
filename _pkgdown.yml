@@ -1,0 +1,42 @@
+url: https://kent-orr.github.io/spigot/
+
+template:
+  bootstrap: 5
+  light-switch: true
+
+navbar:
+  structure:
+    left: [intro, reference, articles, news]
+    right: [search, github, lightswitch]
+  components:
+    intro:
+      text: Get started
+      href: articles/getting-started.html
+
+reference:
+  - title: Build an app
+    contents:
+      - spigot_app
+      - spigot_page
+      - spigot_api
+  - title: Sessions, push and reactivity
+    desc: >
+      Use these inside endpoints and server functions.
+    contents:
+      - spigot_session
+      - spigot_emit
+      - spigot_trigger
+  - title: Helpers
+    contents:
+      - spigot_json
+      - spigot_dependency
+      - run_example
+
+articles:
+  - title: Guides
+    navbar: ~
+    contents:
+      - why-spigot
+      - getting-started
+      - reactivity
+      - client

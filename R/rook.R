@@ -22,13 +22,23 @@ rook_to_httpResponse <- function(res) {
     enc2utf8(paste(as.character(body), collapse = ""))
   }
 
-  shiny::httpResponse(as.integer(res$status), content_type, content, headers)
+  api_response(res$status, content_type, content, headers)
+}
+
+# shiny::httpResponse() with `X-Content-Type-Options: nosniff`, which spigot
+# sets itself: Shiny's httpResponse() adds it only from 1.14.0.
+api_response <- function(status, content_type, content, headers = list()) {
+  headers <- as.list(headers)
+  if (!any(tolower(names(headers)) == "x-content-type-options")) {
+    headers$`X-Content-Type-Options` <- "nosniff"
+  }
+  shiny::httpResponse(as.integer(status), content_type, content, headers)
 }
 
 # A JSON error response: {"error": message}.
 json_error <- function(status, message, hint = NULL) {
-  shiny::httpResponse(
-    as.integer(status),
+  api_response(
+    status,
     "application/json",
     as.character(spigot_json(c(list(error = message), if (!is.null(hint)) list(hint = hint))))
   )

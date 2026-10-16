@@ -68,6 +68,7 @@ test_that("json_error() builds a JSON httpResponse", {
   r <- json_error(401L, "session required")
   expect_s3_class(r, "httpResponse")
   expect_identical(r$status, 401L)
+  expect_identical(r$headers$`X-Content-Type-Options`, "nosniff")
   expect_identical(r$content_type, "application/json")
   expect_identical(resp_json(r), list(error = "session required"))
 })
