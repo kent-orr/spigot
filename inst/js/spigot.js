@@ -244,10 +244,21 @@
     dispatch(msg.event, data);
   }
 
+  // ---- reactive bridge -------------------------------------------------------
+
+  // spigot_trigger() in R keeps the value and sends {name, id}. Sending the id
+  // back as input "<name>:spigot.ref" makes Shiny's spigot.ref input handler
+  // set input[[name]] to the value. "event" priority sends it right away
+  // instead of waiting to batch it with other input changes.
+  function onSetInputMessage(msg) {
+    window.Shiny.setInputValue(msg.name + ":spigot.ref", msg.id, { priority: "event" });
+  }
+
   function addHandlers() {
     var s = window.Shiny;
     if (!s || !s.addCustomMessageHandler) return false;
     s.addCustomMessageHandler("spigot:event", onEventMessage);
+    s.addCustomMessageHandler("spigot:set-input", onSetInputMessage);
     return true;
   }
   // shiny.js loads before this script on spigot pages; wait for it otherwise.

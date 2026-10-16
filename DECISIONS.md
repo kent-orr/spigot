@@ -431,3 +431,37 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   opens the root, and `href="?tab=2"` still resolves from the root; both documented in
   `?spigot_page`.
 - Trailing slash at any depth: `/docs/intro/` → 301 `../intro` (plus query). `//` is a 404.
+
+## 2026-10-16 — M6: `spigot_trigger()` passes the value by reference (changes PLAN §4.5, M6)
+
+- PLAN M6 sent the value as a `spigot_json()` string for the page to `JSON.parse` and pass to
+  `Shiny.setInputValue()`. Checked in shiny 1.14.0 (`shiny:::applyInputHandler()`): an input
+  with no `:type` whose value is an unnamed list is `unlist(recursive = TRUE)`ed. So `I(1)`
+  arrived as `1`, not a length-1 list (PLAN M6 test 5 was wrong), a data frame as one flat
+  named vector, and `NA` as `NULL`, which a default `observeEvent()` (`ignoreNULL = TRUE`)
+  ignores. **F21.**
+- **Decision (Kent, 2026-10-16): by reference.** `spigot_trigger(session, name, value)` stores
+  `value` under a new id in an environment at `session$userData$.spigot_triggers` (hidden from
+  `ls()`; a module's session shares its root's) and sends `spigot:set-input {name, id}`.
+  `spigot.js` calls `Shiny.setInputValue("<name>:spigot.ref", id, {priority: "event"})`. The
+  `spigot.ref` input handler (`shiny::registerInputHandler()` in `.onLoad`, `force = TRUE`)
+  takes the id out of the store and returns the value, so `input[[name]]` is `identical()` to
+  `value`: data frames, factors, Dates, `NA`, environments and functions included. The value
+  never crosses the websocket, so `spigot_json()` is not involved.
+- An id resolves once and only in its own session; an unknown or malformed id gives `NULL`
+  (an input handler cannot leave the input unset, and an error there would end the session).
+  Ids come from a process-wide counter. Values the page never sends back (tab closed first)
+  stay in `userData` until the session ends.
+- Every trigger fires the observers, same value or not: Shiny's `input` is a
+  `ReactiveValues(dedupe = FALSE)`, and `priority: "event"` skips shiny.js's client-side dedupe in
+  `InputNoResendDecorator`. **F22.** (Ids differ anyway, but the handler's output is what Shiny
+  stores, so this is still what matters.)
+- `name` must match `^[A-Za-z][A-Za-z0-9_.-]*$`, checked before namespacing, so no `:` type
+  suffix gets through. With a module's `session`, the name goes through `session$ns()` (the
+  module's `input$cart`). `NULL` session → error (unlike `spigot_emit()`); returns
+  `invisible(TRUE)`.
+- Latency is the M0 step 5 path, unchanged: the e2e test measures fetch start → observer's
+  pushed event over 20 sequential runs and checks the median is under 215 ms (5 × the spike's
+  p95). Observers run *after* the endpoint returns, and only while the page is open.
+- The reactivity vignette draft is `?spigot_trigger` (as M4 used `?spigot_emit`); M7 writes
+  the vignette.

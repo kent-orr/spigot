@@ -237,3 +237,101 @@ root_session <- function(session) {
 is_session <- function(x) {
   (is.environment(x) || inherits(x, "R6")) && is.function(x$sendCustomMessage)
 }
+
+#' Set a Shiny input from an endpoint
+#'
+#' `spigot_trigger()` sets `input[[name]]` in a tab's Shiny session to
+#' `value`, so the app's reactive code (`observeEvent(input$cart, ...)`,
+#' `reactive()`, outputs) runs as if the page had changed an input. Use it
+#' when an API call should update a live view that the server function
+#' builds. Most endpoints do not need it: return the data, or push it with
+#' [spigot_emit()].
+#'
+#' The input is set the normal Shiny way: spigot asks the page, and the page
+#' calls `Shiny.setInputValue()` with `priority: "event"`. So the observers
+#' run in a regular reactive flush, and every trigger fires them, even with
+#' the same value as the last one. It takes one extra trip over the
+#' websocket, about as long as any input change takes Shiny.
+#'
+#' `value` itself never leaves R: the page sends back only an id, and
+#' `input[[name]]` is `identical()` to `value`. Data frames, factors, dates,
+#' `NA` and objects JSON cannot hold arrive unchanged. The value is kept in
+#' the session until the page sends the id back (or the session ends).
+#'
+#' Because the page sets the input, the trigger reaches the observers *after*
+#' the endpoint has returned, and only if the page is open and loaded
+#' spigot.js (every spigot page does). Called with a module's `session`,
+#' `name` is namespaced like the module's own inputs.
+#'
+#' @param session The Shiny session from [spigot_session()], or a server
+#'   function's `session`.
+#' @param name Input name: a letter, then letters, digits, `_`, `.` or `-`.
+#' @param value Any R value.
+#' @return `TRUE`, invisibly.
+#' @export
+#' @examples
+#' \dontrun{
+#' #* @post /cart/add
+#' function(req, sku) {
+#'   s <- spigot::spigot_session(req)
+#'   cart <- add_to_cart(s$userData$cart_id, sku)
+#'   spigot::spigot_trigger(s, "cart", cart)
+#'   list(ok = TRUE)
+#' }
+#'
+#' # In the server function:
+#' server <- function(input, output, session) {
+#'   output$total <- renderText(sum(input$cart$price))
+#' }
+#' }
+spigot_trigger <- function(session, name, value) {
+  if (!is.character(name) || length(name) != 1 || is.na(name) ||
+      !grepl("^[A-Za-z][A-Za-z0-9_.-]*$", name)) {
+    stop("`name` must be an input name: a letter, then letters, digits, ",
+         "`_`, `.` or `-`.", call. = FALSE)
+  }
+  if (is.null(session)) {
+    stop("spigot_trigger() needs a session. ",
+         "Was the endpoint called without a session token?", call. = FALSE)
+  }
+  if (!is_session(session)) {
+    stop("`session` must be a Shiny session.", call. = FALSE)
+  }
+  if (is.function(session$ns)) name <- session$ns(name)
+  id <- next_trigger_id()
+  assign(id, value, envir = trigger_store(session))
+  session$sendCustomMessage("spigot:set-input", list(name = name, id = id))
+  invisible(TRUE)
+}
+
+.trigger <- new.env(parent = emptyenv())
+.trigger$n <- 0
+
+next_trigger_id <- function() {
+  .trigger$n <- .trigger$n + 1
+  format(.trigger$n, scientific = FALSE)
+}
+
+# Values waiting for the page to send their id back. Kept in the session's
+# userData (a hidden name), so they go when the session does. A module's
+# session shares its root's userData.
+trigger_store <- function(session) {
+  store <- session$userData[[".spigot_triggers"]]
+  if (is.null(store)) {
+    store <- new.env(parent = emptyenv())
+    assign(".spigot_triggers", store, envir = session$userData)
+  }
+  store
+}
+
+# Shiny input handler for "<name>:spigot.ref": the page sent back the id of a
+# value spigot_trigger() kept; the input becomes that value. An id this
+# session does not hold gives NULL.
+resolve_trigger <- function(val, shinysession, name) {
+  if (!is.character(val) || length(val) != 1 || is.na(val)) return(NULL)
+  store <- shinysession$userData[[".spigot_triggers"]]
+  if (is.null(store) || !exists(val, envir = store, inherits = FALSE)) return(NULL)
+  value <- get(val, envir = store, inherits = FALSE)
+  rm(list = val, envir = store)
+  value
+}

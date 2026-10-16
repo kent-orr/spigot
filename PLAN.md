@@ -23,6 +23,9 @@
 > nested pages get a relative `<base href>`; `/about/` redirects (301, relative) instead of
 > being served (DECISIONS.md).
 
+> M6 complete (2026-10-16): `spigot_trigger()` passes the value by reference, so `input[[name]]`
+> is `identical()` to it; F21–F22 added (DECISIONS.md).
+
 ## 1. Goal
 
 Build Shiny "sites" where:
@@ -138,6 +141,8 @@ These were read from source, not assumed. Re-verify when bumping either dependen
 | F18 | httpuv sets both `CONTENT_TYPE` and `HTTP_CONTENT_TYPE` (plumber reads the latter), plus `HEADERS`. | `fake_req()` mirrors this. |
 | F19 | Shiny's `onHeaders` reads `shiny.maxRequestSize` per request; a body without `Content-Length` but with `Transfer-Encoding` counts as `Inf`. | Setting the option in `onStart` works; chunked uploads always get 413 under a finite limit. |
 | F20 | `argsForServerFunc()` passes `session` (and `clientData`) only when named in the server's formals. | `wrap_server()` always takes `session` and mirrors this rule for the user's function. |
+| F21 | `applyInputHandler()`: an input without a `:type` whose value is an unnamed list is `unlist(recursive = TRUE)`ed; `"<name>:<type>"` runs the handler from `registerInputHandler()` with `(val, shinysession, name)`. | `spigot_trigger()` sends an id as `<name>:spigot.ref`; its handler returns the stored R value (DECISIONS.md M6). |
+| F22 | Shiny's `input` is `ReactiveValues$new(dedupe = FALSE)`; `priority: "event"` skips the client-side `InputNoResendDecorator` check. | Every trigger fires observers, even with the same value. |
 
 Environment on this dev machine: R 4.5.2, shiny 1.14.0, whisker 0.4.1, htmltools 0.5.9,
 jsonlite 2.0.0, promises 1.5.0, httr2 1.3.0, callr 3.8.0, testthat 3.3.2, later 1.4.8,
@@ -189,12 +194,9 @@ future 1.70.0, httpuv 1.6.17, plumber 1.3.3, chromote 0.5.1 + Chrome for Testing
 
 Problem: setting a `reactiveVal` from an HTTP handler happens outside Shiny's flush cycle, so outputs may not update until the next websocket event.
 
-Options (spike in M0, pick one):
+As built (M0 step 5, M6): **round-trip, by reference.** `spigot_trigger(session, name, value)` keeps `value` in the session (`userData`) under a new id and sends custom message `spigot:set-input` `{name, id}`. JS calls `Shiny.setInputValue(name + ":spigot.ref", id, {priority: "event"})`; spigot's registered `spigot.ref` input handler swaps the id for the value (F21). `input[[name]]` is `identical()` to `value`, every trigger fires observers (F22), and the flush is Shiny's normal one. Option 2 (direct set + scheduled flush, needs internals) stays rejected.
 
-1. **Round-trip** (no internals): the server sends custom message `spigot:set-input` `{name, value}`, and JS calls `Shiny.setInputValue(name, value, {priority: "event"})`. This guarantees a normal flush and costs one extra websocket hop. `priority: "event"` is confirmed present in shiny.min.js 1.14.0.
-2. **Direct + scheduled flush**: run `withReactiveDomain(session, rv(value))` followed by `later::later(<flush>)`. This needs an internal Shiny function, so it is rejected unless option 1 proves too slow.
-
-Default to option 1. Server code then just uses `input$<name>` as usual.
+Server code then just uses `input$<name>` as usual.
 
 ### 4.6 Concurrency
 
@@ -441,6 +443,11 @@ gets a relative 301 to `/about` rather than the page (step 6). `/reactlog` falls
 
 **Exit:** green; reactivity vignette complete.
 
+**As built (DECISIONS.md M6):** the value goes by reference, not as JSON (F21 showed Shiny
+unlists unnamed lists), so `input[[name]]` is `identical()` to the value; test 5 checks that
+instead. The message is `{name, id}` and the input is set as `<name>:spigot.ref` (steps 1, 7).
+A module's session namespaces `name`. The vignette draft is `?spigot_trigger`; M7 writes it.
+
 ### M7: Examples, docs, release prep
 
 1. `inst/examples/minimal`: one page, `GET /api/hello`. `inst/examples/live`: counter with `spigot_emit` + `spigot_trigger`. `inst/examples/site`: three pages, partials, one `future_promise` endpoint. Each has an `app.R` that calls `spigot_app()`.
@@ -469,7 +476,7 @@ gets a relative 301 to `/about` rather than the page (step 6). `/reactlog` falls
 | Sync endpoint blocks all sessions | Perceived hangs | Docs; optional dev-mode warning when a handler exceeds N ms |
 | Session token exposure | Another user replays the token | Token is per-tab and already sent over the same websocket; HTTPS assumed; tokens die with the session; origin guard |
 | Template injection through `htmlTemplate` | Remote code execution | Never pass whisker output through `htmlTemplate` text; only through `HTML()` values (§4.3, M5 test 3) |
-| `auto_unbox` / JSON shape drift | Frontend bugs | Single serializer `spigot_json()`; tests on shape edge cases in M1, M4, M6 |
+| `auto_unbox` / JSON shape drift | Frontend bugs | Single serializer `spigot_json()`; tests on shape edge cases in M1, M4; `spigot_trigger()` skips JSON (M6) |
 | 413 responses are plain text from Shiny, not JSON (F5) | Client parsing surprise | `SpigotError.body` falls back to text; documented |
 | plumber 1.x enters maintenance-only status | Long-term | Keep plumber usage behind `api.R`, `rook.R`, and `mount.R`. A plumber2 backend would be the sidecar design, a separate decision |
 | No Chrome on a CI runner or dev box | e2e silently skipped | `skip_if_no_chrome()` prints a visible skip; CI has at least one cell with Chrome and treats skips there as failures (`testthat::set_max_fails`/custom reporter) |
