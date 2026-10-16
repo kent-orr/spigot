@@ -37,10 +37,10 @@
 > [`identical()`](https://rdrr.io/r/base/identical.html) to it; F21–F22
 > added (DECISIONS.md).
 
-> M7 in progress (2026-10-16): examples, vignettes (plus `why-spigot`
-> and `client`), pkgdown site for GitHub Pages and CI are written;
-> `shiny (>= 1.11.0)`, because older shiny breaks hand-written forms
-> (DECISIONS.md). Left: first CI run, Pages setup, tag.
+> M7 complete (2026-10-16): examples, vignettes (plus `why-spigot` and
+> `client`), pkgdown site at <https://kent-orr.github.io/spigot/> and CI
+> (4 cells green); `shiny (>= 1.11.0)`, because older shiny breaks
+> hand-written forms (DECISIONS.md). Tagged `v0.1.0`.
 
 ## 1. Goal
 
