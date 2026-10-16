@@ -11,7 +11,7 @@ api <- spigot::spigot_api() |>
   plumber::pr_post("/whoami", whoami)
 
 spigot::spigot_app(
-  ui = fluidPage(tags$p("spigot-session-fixture")),
+  pages = fluidPage(tags$p("spigot-session-fixture")),
   api = api,
   max_request_size = 1024
 )

@@ -20,7 +20,8 @@ Imports:
     plumber (>= 1.0.0),
     promises,
     shiny (>= 1.14.0),
-    utils
+    utils,
+    whisker
 Suggests: 
     callr,
     chromote,

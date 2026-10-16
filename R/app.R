@@ -1,7 +1,22 @@
 #' Create a Shiny app with a plumber API mounted inside it
 #'
 #' The API is served by the same process, origin and port as the app, under
-#' `prefix`. Every other path is handled by Shiny as usual.
+#' `prefix`. The `pages` are served at their paths, and every other path is
+#' handled by Shiny as usual (`www/` files, for an app directory).
+#'
+#' @section Pages:
+#' `pages` is one page, served at `/`, or a named list of them, such as
+#' `list("/" = home, "/about" = about)`. A path is `/` or a single segment
+#' (`/about`, not `/docs/intro`), so relative URLs in every page resolve
+#' from the app's root. `/about/` redirects to `/about`, and any other path
+#' that is not a page or a file gets a `404` HTML page. Only `GET` requests
+#' reach a page.
+#'
+#' A page is usually a [spigot_page()]: a hand-written HTML template. It can
+#' also be anything [shiny::shinyApp()] accepts as `ui`, such as
+#' [shiny::fluidPage()], an [shiny::htmlTemplate()] document, or a
+#' `function(req)` returning one of those (or an [shiny::httpResponse()]).
+#'
 #'
 #' @section Sessions:
 #' Each browser tab is a Shiny session. Its page sends the session token
@@ -31,8 +46,8 @@
 #' status `413` with the **plain-text** body `Maximum upload size exceeded`,
 #' not JSON. Clients should not assume every error body is JSON.
 #'
-#' @param ui The Shiny UI, as for [shiny::shinyApp()]. (Temporary: a later
-#'   version replaces this with `pages`.)
+#' @param pages One page, served at `/`, or a named list of pages keyed by
+#'   path. See the Pages section.
 #' @param server Optional Shiny server function.
 #' @param api A plumber router or the path to a plumber file. A file is read
 #'   with [spigot_api()]; a router is used as given, so build it from
@@ -50,17 +65,21 @@
 #' @examples
 #' \dontrun{
 #' api <- spigot_api() |> plumber::pr_get("/hello", function() list(msg = "hi"))
-#' shiny::runApp(spigot_app(ui = shiny::fluidPage("hi"), api = api))
+#' home <- spigot_page("<html><head></head><body><p id='msg'></p></body></html>")
+#' shiny::runApp(spigot_app(pages = home, api = api))
 #' }
-spigot_app <- function(ui, server = NULL, api, prefix = "/api",
+spigot_app <- function(pages, server = NULL, api, prefix = "/api",
                        require_session = TRUE, max_request_size = NULL) {
+  if (missing(pages)) stop("`pages` is required: a spigot_page() or a list of them.", call. = FALSE)
   if (missing(api)) stop("`api` is required: a plumber router or file.", call. = FALSE)
   prefix <- check_prefix(prefix)
+  pages <- as_pages(pages)
+  check_pages_vs_prefix(names(pages), prefix)
   guard <- request_guard(require_session)
   check_max_request_size(max_request_size)
 
-  ui <- attach_spigot(ui, spigot_dependency(prefix))
-  app <- shiny::shinyApp(ui = ui, server = wrap_server(server))
+  ui <- attach_spigot(page_router(pages), spigot_dependency(prefix))
+  app <- shiny::shinyApp(ui = ui, server = wrap_server(server), uiPattern = ".*")
   app <- mount_app(app, spigot_api(api, envir = parent.frame()), prefix = prefix,
                    guard = guard)
   if (!is.null(max_request_size)) {
@@ -70,6 +89,17 @@ spigot_app <- function(ui, server = NULL, api, prefix = "/api",
     })
   }
   app
+}
+
+# The API is mounted in front of the pages, so a page under the prefix would
+# never be reached.
+check_pages_vs_prefix <- function(paths, prefix) {
+  hidden <- paths[grepl(paste0("^", regex_escape(prefix), "(/|$)"), paths)]
+  if (length(hidden)) {
+    stop("The page \"", hidden[1], "\" is under the API prefix \"", prefix,
+         "\", so it would never be served.", call. = FALSE)
+  }
+  invisible()
 }
 
 check_max_request_size <- function(x) {

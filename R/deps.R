@@ -44,13 +44,14 @@ spigot_dependency <- function(prefix = "/api") {
 }
 
 # Make `ui` (anything shiny::shinyApp() accepts) carry `dep` on every
-# request. An httpResponse from a ui function passes through untouched.
+# request. An httpResponse or NULL from a ui function passes through
+# untouched (NULL makes Shiny try its next handler).
 attach_spigot <- function(ui, dep) {
   force(ui)
   force(dep)
   function(req) {
-    x <- if (!is.function(ui)) ui else if (length(formals(ui))) ui(req) else ui()
-    if (inherits(x, "httpResponse")) return(x)
+    x <- if (is.function(ui)) call_with_req(ui, req) else ui
+    if (is.null(x) || inherits(x, "httpResponse")) return(x)
     htmltools::attachDependencies(x, dep, append = TRUE)
   }
 }

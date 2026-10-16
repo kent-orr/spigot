@@ -52,4 +52,4 @@ api <- spigot::spigot_api() |>
   plumber::pr_post("/say", say) |>
   plumber::pr_post("/shapes", shapes)
 
-spigot::spigot_app(ui = fluidPage(tags$p("spigot-push-fixture")), api = api)
+spigot::spigot_app(pages = fluidPage(tags$p("spigot-push-fixture")), api = api)

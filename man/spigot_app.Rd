@@ -5,7 +5,7 @@
 \title{Create a Shiny app with a plumber API mounted inside it}
 \usage{
 spigot_app(
-  ui,
+  pages,
   server = NULL,
   api,
   prefix = "/api",
@@ -14,8 +14,8 @@ spigot_app(
 )
 }
 \arguments{
-\item{ui}{The Shiny UI, as for \code{\link[shiny:shinyApp]{shiny::shinyApp()}}. (Temporary: a later
-version replaces this with \code{pages}.)}
+\item{pages}{One page, served at \code{/}, or a named list of pages keyed by
+path. See the Pages section.}
 
 \item{server}{Optional Shiny server function.}
 
@@ -39,8 +39,24 @@ A \code{shiny.appobj}.
 }
 \description{
 The API is served by the same process, origin and port as the app, under
-\code{prefix}. Every other path is handled by Shiny as usual.
+\code{prefix}. The \code{pages} are served at their paths, and every other path is
+handled by Shiny as usual (\verb{www/} files, for an app directory).
 }
+\section{Pages}{
+
+\code{pages} is one page, served at \code{/}, or a named list of them, such as
+\code{list("/" = home, "/about" = about)}. A path is \code{/} or a single segment
+(\verb{/about}, not \verb{/docs/intro}), so relative URLs in every page resolve
+from the app's root. \verb{/about/} redirects to \verb{/about}, and any other path
+that is not a page or a file gets a \code{404} HTML page. Only \code{GET} requests
+reach a page.
+
+A page is usually a \code{\link[=spigot_page]{spigot_page()}}: a hand-written HTML template. It can
+also be anything \code{\link[shiny:shinyApp]{shiny::shinyApp()}} accepts as \code{ui}, such as
+\code{\link[shiny:fluidPage]{shiny::fluidPage()}}, an \code{\link[shiny:reexports]{shiny::htmlTemplate()}} document, or a
+\verb{function(req)} returning one of those (or an \code{\link[shiny:httpResponse]{shiny::httpResponse()}}).
+}
+
 \section{Sessions}{
 
 Each browser tab is a Shiny session. Its page sends the session token
@@ -78,6 +94,7 @@ not JSON. Clients should not assume every error body is JSON.
 \examples{
 \dontrun{
 api <- spigot_api() |> plumber::pr_get("/hello", function() list(msg = "hi"))
-shiny::runApp(spigot_app(ui = shiny::fluidPage("hi"), api = api))
+home <- spigot_page("<html><head></head><body><p id='msg'></p></body></html>")
+shiny::runApp(spigot_app(pages = home, api = api))
 }
 }

@@ -61,6 +61,9 @@ test_that("attach_spigot() adds the dependency to any kind of ui", {
 
   resp <- shiny::httpResponse(404L, content = "nope")
   expect_identical(attach_spigot(function(req) resp, dep)(fake_req()), resp)
+
+  # NULL means "not mine": Shiny passes the request on to its next handler.
+  expect_null(attach_spigot(function(req) NULL, dep)(fake_req()))
 })
 
 # ---- integration: the page Shiny serves ----------------------------------------

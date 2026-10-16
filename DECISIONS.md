@@ -341,3 +341,62 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   push-before-reply ordering, emit from the main process not a `future` worker).
 - Integration tests read pushes from the websocket without Chrome: `open_session()` now
   returns `custom(type)`.
+
+## 2026-10-16 — M5: `pages` replaces `ui`, and takes Shiny UI too
+
+- `spigot_app(pages, ...)` replaces the temporary `ui` argument (PLAN §3). `pages` is one page,
+  served at `/`, or a named list keyed by path. A plain (unclassed) list is a list of pages;
+  anything classed (a `spigot_page`, a `tagList`, an `html_document`) or a function is one page.
+- A page is a `spigot_page()` **or anything `shinyApp()` takes as `ui`** (`fluidPage()`,
+  `htmlTemplate()`, `function(req)`, an `httpResponse`). This keeps Shiny UI available as an
+  opt-in, per the §1 non-goals, and let every M1–M4 fixture switch from `ui =` to `pages =`
+  with no other change.
+- `spigot_page()` attaches no dependency itself. `spigot_app()` attaches `spigot_dependency()`
+  to every page in `attach_spigot()`, as in M3, so spigot.js is attached in one place for both
+  kinds of page (changes PLAN M5 step 9). `attach_spigot()` now passes `NULL` through.
+
+## 2026-10-16 — M5: page paths are one segment; a trailing slash redirects
+
+- Shiny writes its dependency URLs relative (`jquery-3.7.1/jquery.min.js`). A page at
+  `/docs/intro`, or at `/about/`, resolves them under `/docs/` or `/about/` and loads no Shiny,
+  so no session and no API. The M3 entry suggested a `<base href>`. **Rejected for now:**
+  injecting one silently changes the user's own relative links, and turns `href="#section"`
+  into a link to the app root.
+- **Decision:** a page path is `/` or one segment (`^/[A-Za-z0-9._~-]+$`, not `/session` or
+  `/shared`, and not under the API prefix). Nested pages are an error at `spigot_app()` time;
+  support them later only if a site needs them (then `<base href>` is the likely answer).
+- `/about/` gets `301` with `Location: ../about` plus the query string, instead of serving the
+  page there (PLAN §4.3 said "normalised"). The relative `Location` stays correct under a proxy
+  subpath: the e2e test opens `/sub/app/about/` through `start_proxy()` and lands on
+  `/sub/app/about` with a working session. A trailing slash on an unknown path is a 404.
+- Routing is `shinyApp(uiPattern = ".*")` with `page_router()` as the ui function (F10). Unknown
+  paths get a fixed HTML 404 that does not echo the path. Under `runApp()`, `shared/`, every
+  dependency directory and `www/` are httpuv static paths (`startHttpuvApp()`,
+  `addResourcePath()`), so the catch-all shadows only Shiny's R-level handlers after the app's:
+  `/reactlog` and `/reactlog/mark`, which `page_router()` returns `NULL` for.
+- Only `GET` reaches a page (Shiny's `uiHttpHandler`, F3). A `POST /about` gets Shiny's 404, or
+  httpuv's plain-text 400 in an app directory with `www/` (F16).
+
+## 2026-10-16 — M5: templates
+
+- A `template` (or partial) string containing `<`, `{{` or a line break is template text;
+  anything else is a file path, read as UTF-8 **when `spigot_page()` runs**, relative to the
+  working directory (the app directory under `runApp()`). A missing file is an error naming it.
+  Shiny's autoreload re-sources `app.R` when an `.html` file changes, so reading once is fine
+  in development.
+- whisker sees only `data`: a global or a local variable of the same name renders empty
+  (checked, also for `{{HOME}}`). It escapes `&`, `<`, `>`, `"`, **not `'`**; `?spigot_page`
+  says to use double-quoted attributes. whisker has no lambdas (a function value renders empty).
+- whisker reads `<name>.mustache` from the working directory for a partial it was not given.
+  spigot does not want two sources of partials: `spigot_page()` checks every `{{> name}}` tag
+  against `partials` at creation, and `render_whisker()` renders from an empty temp directory
+  and turns whisker's "No partial" warning into an error (this covers tags after a delimiter
+  change, which the creation check cannot see).
+- `</head>` must be in the template or a partial at creation (M0 step 4), matched as
+  `</head\s*>` in any case; a render whose output has none is an error.
+- `data` is a named list, or a function called per request (with `req` if it takes an
+  argument, as Shiny calls `ui`). `cache = TRUE` memoises the rendered `html_document` on the
+  first request and needs list `data`. Since list data is static, a cached and an uncached page
+  render the same HTML; the unit test counts `render_whisker()` calls instead.
+- The minimal example now uses `spigot_page("index.html")`; its template lost
+  `{{ headContent() }}`.

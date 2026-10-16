@@ -19,6 +19,9 @@
 > `FALSE`; broadcast reaches every spigot session in the R process and takes `except =`/`filter =`
 > (DECISIONS.md).
 
+> M5 complete (2026-10-16): `pages` replaces `ui` and also takes Shiny UI; page paths are one
+> segment; `/about/` redirects (301, relative) instead of being served (DECISIONS.md).
+
 ## 1. Goal
 
 Build Shiny "sites" where:
@@ -172,7 +175,7 @@ future 1.70.0, httpuv 1.6.17, plumber 1.3.3, chromote 0.5.1 + Chrome for Testing
 
   `HTML()` values are never re-templated. Returning the `html_document` lets Shiny inject jQuery, shiny.js and `spigot_dependency()` publicly (F9). No string surgery on dependency HTML, no internals.
 - Templates without `</head>` → error at `spigot_page()` creation time with a clear message.
-- Multi-page: `ui` becomes a `function(req)` that routes on `req$PATH_INFO`, with `shinyApp(uiPattern = ".*")` (F10). Unknown paths → a 404 `httpResponse` (F9). Trailing slashes are normalised (`/about/` == `/about`).
+- Multi-page: `ui` becomes a `function(req)` that routes on `req$PATH_INFO`, with `shinyApp(uiPattern = ".*")` (F10). Unknown paths → a 404 `httpResponse` (F9). `/about/` redirects to `../about` (as built: paths are one segment, DECISIONS.md M5).
 - Render timing: per request by default. `cache = TRUE` renders once at first request and memoises the `html_document` (safe because `data` is static).
 
 ### 4.4 Push
@@ -414,6 +417,10 @@ two custom message handlers from step 9 are written in M4 and M6 with their test
 10. `R/app.R`: `page_router(pages)` → `ui <- function(req)` that normalises `PATH_INFO`, picks the page, calls `render(req)`, or returns `httpResponse(404, …)`. `shinyApp(ui, server, uiPattern = ".*")`. Path keys are validated (`^/` and no trailing slash except `/`).
 
 **Exit:** green; `getting-started.Rmd` can be written against the real API.
+
+**As built (DECISIONS.md M5):** a page may also be any Shiny UI; `spigot_app()`, not
+`render()`, attaches spigot.js (step 9). Paths are `/` or one segment, and `/about/` gets a
+relative 301 to `/about` rather than the page (step 6). `/reactlog` falls through to Shiny.
 
 ### M6: Reactive bridge
 

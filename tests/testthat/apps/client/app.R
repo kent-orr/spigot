@@ -64,6 +64,6 @@ early <- "
 "
 
 spigot::spigot_app(
-  ui = tagList(tags$p("spigot-client-fixture"), tags$script(HTML(early))),
+  pages = tagList(tags$p("spigot-client-fixture"), tags$script(HTML(early))),
   api = api
 )
