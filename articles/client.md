@@ -1,0 +1,130 @@
+# The browser client: spigot.js
+
+[`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+adds `spigot.js` to every page it serves, after jQuery and Shiny’s own
+script. It defines `window.spigot`. It is plain JavaScript with no build
+step, and needs only what every current browser has: `fetch`, `Promise`,
+`URL` and `AbortController`.
+
+For a page that
+[`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+does not serve, such as a
+[`shiny::fluidPage()`](https://rdrr.io/pkg/shiny/man/fluidPage.html) in
+a classic Shiny app, attach
+[`spigot_dependency()`](https://kent-orr.github.io/spigot/reference/spigot_dependency.md)
+to it.
+
+## Calling the API
+
+``` js
+spigot.get(path, query, options)
+spigot.del(path, query, options)
+spigot.post(path, body, options)
+spigot.put(path, body, options)
+spigot.request(method, path, options)
+```
+
+Each returns a promise of the reply.
+
+**`path`** is relative to the API: `"items"` and `"/items"` both mean
+`api/items` (with the default prefix), resolved against the page’s URL.
+The app therefore keeps working under a subpath. `spigot.base` holds the
+resolved API URL.
+
+**`query`** is an object of query-string parameters. Arrays repeat the
+parameter (`{id: [1, 2]}` gives `id=1&id=2`), and `null` or `undefined`
+values are left out.
+
+**`body`** is sent as JSON with `Content-Type: application/json`,
+strings included. These are sent unchanged, with the browser’s own
+content type: `FormData`, `URLSearchParams`, `Blob`, `ArrayBuffer` and
+typed arrays. To send plain text, wrap it in a `Blob`. A binary body
+needs `#* @parser octet` on the endpoint.
+
+**`options`** is an object with any of:
+
+- `query`, `body`: as above, for `spigot.request()`.
+- `headers`: extra request headers, as an object or a `Headers`.
+- `timeout`: milliseconds. If no reply has arrived by then, the request
+  is aborted and the promise rejects with a `SpigotError` whose `status`
+  is `0`. The time counts from the call, including any wait for the
+  session.
+
+The reply is parsed by its content type: JSON gives the value, an empty
+body gives `null`, and anything else gives the text.
+
+## Errors: `spigot.SpigotError`
+
+A call rejects with a `spigot.SpigotError` (a subclass of `Error`) when
+the reply is not 2xx or when no reply arrives:
+
+- `status`: the HTTP status, or `0` for a timeout or network failure.
+- `message`: the JSON reply’s `error` field if it has one, else the HTTP
+  status text.
+- `body`: the parsed reply.
+
+``` js
+try {
+  const rows = await spigot.get("forecast", { sku: "A1", h: 12 });
+  draw(rows);
+} catch (err) {
+  if (!(err instanceof spigot.SpigotError)) throw err;
+  if (err.status === 0) showOffline();
+  else showError(err.message);
+}
+```
+
+An endpoint chooses its error status by setting `res$status` and
+returning a list with an `error` element. Some errors come from spigot
+or Shiny rather than your endpoints:
+
+| Status | Body | When |
+|----|----|----|
+| 401 | `{"error": "session required", ...}` | No live session token, with `require_session = TRUE` |
+| 403 | `{"error": "cross-origin request refused"}` | The request came from a page on another origin |
+| 404, 405 | plumber’s JSON | No such endpoint, or the wrong method for it |
+| 413 | plain text | The body is over Shiny’s size limit (`max_request_size`) |
+| 500 | `{"error": ...}` | The endpoint threw an error |
+
+## The session
+
+Every request carries the tab’s Shiny session token in an
+`X-Spigot-Session` header, which is how `spigot_session(req)` finds the
+tab in R. Requests made before the session has started wait for it.
+
+- `spigot.ready`: a promise that resolves with the token once the
+  session has started.
+- `spigot.sessionId`: the token, or `null` before then. After Shiny
+  reconnects, requests use the new session’s token.
+
+## Events from R
+
+`spigot.on(event, fn)` calls `fn(data, event)` for each event that R
+sends with
+[`spigot_emit()`](https://kent-orr.github.io/spigot/reference/spigot_emit.md)
+or
+[`spigot_broadcast()`](https://kent-orr.github.io/spigot/reference/spigot_emit.md),
+and returns a function that removes the listener.
+`spigot.off(event, fn)` removes `fn`; `spigot.off(event)` removes all of
+that event’s listeners. A listener that throws does not stop the others,
+and its error still reaches the console.
+
+``` js
+const stop = spigot.on("job:progress", (p) => {
+  bar.value = p.done / p.total;
+  if (p.done === p.total) stop();
+});
+```
+
+Events that arrive before a listener is registered are dropped, and an
+event can arrive before the HTTP reply to the request that caused it.
+See
+[`vignette("reactivity", package = "spigot")`](https://kent-orr.github.io/spigot/articles/reactivity.md).
+
+## Links on nested pages
+
+A page below the top level, such as `/docs/intro`, gets a `<base href>`
+that points at the app root, so its relative URLs mean the same as on
+every other page. `spigot.js` keeps plain clicks on `href="#section"`
+links on the page instead of following the base to the app root. See
+[`?spigot_page`](https://kent-orr.github.io/spigot/reference/spigot_page.md).
