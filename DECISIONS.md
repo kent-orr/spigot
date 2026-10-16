@@ -158,6 +158,7 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
 - The rewritten `PATH_INFO`/`SCRIPT_NAME` are restored when the request finishes. For async
   results that is in `promises::finally()`, not `on.exit()`, because plumber routes after async
   filters resolve. Test: "the prefix stays stripped until an async filter has finished routing".
+  *Superseded in M9: the request is no longer restored.*
 - Mount-level failures (sync or async) → `{"error":"internal server error"}` 500. The condition
   message goes to stderr via `message()` and never to the client.
 - Prefix rule: `^(/[A-Za-z0-9._~-]+)+$`. The first segment must not be `session` or `shared`
@@ -524,3 +525,20 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   `shiny::shinyApp()`'s result), the idempotency branch in `register_session()` (only
   `wrap_server()` calls it, once per session), and `spigot_app()`'s `missing()` checks
   (R's own "argument is missing" error remains).
+
+## 2026-10-16 — M9: the mount handler does not restore the request (supersedes M1)
+
+- `spigot_mount_handler()` used to put `PATH_INFO` and `SCRIPT_NAME` back after plumber
+  answered (`on.exit()` for sync results, `promises::finally()` for async). Shiny's
+  `routeHandler` does that because a routed handler may return `NULL` and let the next
+  handler see the request. `shiny:::joinHandlers` (checked, 1.14.0) only moves on to the
+  next handler on `NULL`.
+- spigot's handler never returns `NULL` under the prefix: the guard's denial, `pr$call()`'s
+  result and `mount_failure()` are all responses. So nothing reads the request afterwards,
+  and the restore is gone. Paths outside the prefix go to the fallback before any rewrite.
+- The async-filter test stays: plumber still has to see the stripped path inside an async
+  filter, and it does, because nothing puts the prefix back.
+- Three test assertions checked the restore and went with it: after a sync call, after an
+  async call, and after a sync mount-level failure ("a mount-level failure is a JSON 500").
+  PLAN M9 listed only the first two; the third is the same behaviour on the error path, not
+  a further change.

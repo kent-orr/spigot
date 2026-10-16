@@ -29,12 +29,10 @@ test_that("/api and /api/ both hit GET /", {
   expect_identical(resp_json(h(fake_req("GET", "/api/"))), list(root = TRUE))
 })
 
-test_that("the prefix moves from PATH_INFO to SCRIPT_NAME, then is restored", {
+test_that("the prefix moves from PATH_INFO to SCRIPT_NAME", {
   h <- mount()
   req <- fake_req("GET", "/api/path")
   expect_identical(resp_json(h(req)), list(script = "/api", path = "/path"))
-  expect_identical(req$PATH_INFO, "/api/path")
-  expect_identical(req$SCRIPT_NAME, "")
 })
 
 test_that("non-prefix paths fall through untouched", {
@@ -85,7 +83,6 @@ test_that("a mount-level failure is a JSON 500, not Shiny's HTML page", {
   expect_identical(r$status, 500L)
   expect_identical(r$content_type, "application/json")
   expect_identical(resp_json(r), list(error = "internal server error"))
-  expect_identical(req$PATH_INFO, "/api/x")
 })
 
 test_that("an async mount-level failure is a JSON 500", {
@@ -107,7 +104,6 @@ test_that("async endpoints return a promise of an httpResponse", {
   expect_s3_class(r, "httpResponse")
   expect_identical(r$status, 200L)
   expect_identical(resp_json(r), list(a = 1L))
-  expect_identical(req$PATH_INFO, "/api/async")
 })
 
 test_that("the prefix stays stripped until an async filter has finished routing", {

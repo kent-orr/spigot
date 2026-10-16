@@ -32,17 +32,9 @@ spigot_mount_handler <- function(pr, prefix = "/api", fallback = function(req) N
     path <- req$PATH_INFO
     if (is.null(path) || !grepl(pattern, path)) return(fallback(req))
 
-    old_script <- req$SCRIPT_NAME %||% ""
-    restore <- function() {
-      req$SCRIPT_NAME <- old_script
-      req$PATH_INFO <- path
-    }
-    # plumber routes after async filters resolve, so the rewritten path must
-    # live until the promise settles, not just until this function returns.
-    async <- FALSE
-    on.exit(if (!async) restore())
-
-    req$SCRIPT_NAME <- paste0(old_script, prefix)
+    # Not restored afterwards: this handler always answers, so no later
+    # handler sees the request (DECISIONS, M9).
+    req$SCRIPT_NAME <- paste0(req$SCRIPT_NAME %||% "", prefix)
     rest <- substring(path, nchar(prefix) + 1L)
     req$PATH_INFO <- if (identical(rest, "")) "/" else rest
 
@@ -53,11 +45,9 @@ spigot_mount_handler <- function(pr, prefix = "/api", fallback = function(req) N
       }
       res <- pr$call(req)
       if (!promises::is.promising(res)) return(rook_to_httpResponse(res))
-      async <- TRUE
       res |>
         promises::then(rook_to_httpResponse) |>
-        promises::catch(mount_failure) |>
-        promises::finally(restore)
+        promises::catch(mount_failure)
     }, error = mount_failure)
   }
 }
