@@ -217,12 +217,6 @@ test_that("the 404 page does not echo the path", {
   expect_no_match(r$content, "script", fixed = TRUE)
 })
 
-test_that("Shiny's reactlog paths fall through to Shiny", {
-  route <- page_router(two_pages())
-  expect_null(route(fake_req("GET", "/reactlog")))
-  expect_null(route(fake_req("GET", "/reactlog/mark")))
-})
-
 test_that("pages can be any Shiny UI, or a function of the request", {
   tag <- shiny::fluidPage("plain shiny")
   route <- page_router(list(

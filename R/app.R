@@ -72,8 +72,6 @@
 #' }
 spigot_app <- function(pages, server = NULL, api, prefix = "/api",
                        require_session = TRUE, max_request_size = NULL) {
-  if (missing(pages)) stop("`pages` is required: a spigot_page() or a list of them.", call. = FALSE)
-  if (missing(api)) stop("`api` is required: a plumber router or file.", call. = FALSE)
   prefix <- check_prefix(prefix)
   pages <- as_pages(pages)
   check_pages_vs_prefix(names(pages), prefix)

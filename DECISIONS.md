@@ -512,3 +512,15 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   1.8.0 and 1.10.0 fail only the `minimal`/`site` browser tests (the submit-button bug above)
   once `nosniff` is spigot's; **1.11.0 passes everything**. `DESCRIPTION` now has
   `shiny (>= 1.11.0)`, and CI has a cell pinned to 1.11.0. F1, F4 and F9 hold back to 1.8.0.
+
+## 2026-10-16 — M8: `/reactlog` is a 404 under spigot
+
+- `page_router()` used to return `NULL` for `/reactlog` and `/reactlog/...` so Shiny's
+  reactlog handler could answer. That special case is gone: a spigot app answers
+  `/reactlog` with its own 404, like any other unknown path. reactlog is a development
+  tool; a user who needs it under spigot can add a page or open an issue.
+- Removed with it in the 0.1.1 simplification pass, none user-visible: the `shiny.appobj`
+  and `httpHandler` checks in internal `mount_app()` (its only caller passes
+  `shiny::shinyApp()`'s result), the idempotency branch in `register_session()` (only
+  `wrap_server()` calls it, once per session), and `spigot_app()`'s `missing()` checks
+  (R's own "argument is missing" error remains).

@@ -154,12 +154,6 @@ test_that("regex characters in the prefix are matched literally", {
   expect_identical(h(fake_req("GET", "/a.i/items"))$status, 200L)
 })
 
-test_that("mount_app() only accepts a shiny.appobj with an httpHandler", {
-  expect_error(mount_app(list(httpHandler = identity), test_router()), "shiny.appobj")
-  bad <- structure(list(httpHandler = NULL), class = "shiny.appobj")
-  expect_error(mount_app(bad, test_router()), "httpHandler")
-})
-
 test_that("mount_app() puts the API in front of the app's own handler", {
   app <- shiny::shinyApp(ui = shiny::fluidPage("hello"), server = function(input, output) {})
   orig <- app$httpHandler

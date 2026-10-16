@@ -4,8 +4,7 @@
 reserved_prefixes <- c("session", "shared")
 
 check_prefix <- function(prefix) {
-  ok <- is.character(prefix) && length(prefix) == 1 && !is.na(prefix) &&
-    grepl("^(/[A-Za-z0-9._~-]+)+$", prefix)
+  ok <- is_string(prefix) && grepl("^(/[A-Za-z0-9._~-]+)+$", prefix)
   if (!ok) {
     stop("`prefix` must look like \"/api\": a leading slash, no trailing slash, ",
          "and only letters, digits, '.', '_', '~' or '-' in each segment.", call. = FALSE)
@@ -71,14 +70,6 @@ mount_failure <- function(e) {
 # Put the API in front of the app's own HTTP handler, and keep httpuv's static
 # file serving away from the prefix.
 mount_app <- function(app, pr, prefix = "/api", guard = NULL) {
-  if (!inherits(app, "shiny.appobj")) {
-    stop("`app` must be a shiny.appobj (from shiny::shinyApp()).", call. = FALSE)
-  }
-  if (!is.function(app$httpHandler)) {
-    stop("This shiny.appobj has no httpHandler function; the installed shiny ",
-         "version may have changed its structure. spigot needs shiny >= 1.14.0.",
-         call. = FALSE)
-  }
   # spigot_mount_handler() forces `fallback`, so this captures the original
   # handler before the field is replaced (otherwise it would call itself).
   app$httpHandler <- spigot_mount_handler(pr, prefix, fallback = app$httpHandler,

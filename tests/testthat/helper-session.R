@@ -29,7 +29,6 @@ fake_session <- function(token = random_token()) {
     invisible()
   }
   s$sent <- function() sent
-  s$callbacks <- function() length(callbacks)
   s
 }
 

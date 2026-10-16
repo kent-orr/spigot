@@ -12,15 +12,6 @@ test_that("an ended session is removed from the registry", {
   expect_null(lookup_session(s$token))
 })
 
-test_that("registering twice is idempotent", {
-  s <- local_session()
-  register_session(s)
-  expect_identical(lookup_session(s$token), s)
-  expect_identical(s$callbacks(), 1L)
-  s$end()
-  expect_null(lookup_session(s$token))
-})
-
 test_that("tokens are not case-folded", {
   s <- local_session()
   expect_null(lookup_session(toupper(s$token)))

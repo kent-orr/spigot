@@ -38,7 +38,7 @@ available_examples <- function() {
 }
 
 example_dir <- function(name) {
-  if (!is.character(name) || length(name) != 1 || is.na(name)) {
+  if (!is_string(name)) {
     stop("`name` must be a single example name.", call. = FALSE)
   }
   available <- available_examples()

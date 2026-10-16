@@ -110,8 +110,6 @@ print.spigot_page <- function(x, ...) {
 
 # ---- templates ---------------------------------------------------------------------
 
-is_string <- function(x) is.character(x) && length(x) == 1 && !is.na(x)
-
 looks_like_text <- function(x) grepl("<|\\{\\{|\n", x)
 
 template_label <- function(x) {
@@ -239,13 +237,12 @@ is_page_path <- function(path) {
     !strsplit_first(path) %in% reserved_prefixes
 }
 
-strsplit_first <- function(path) vapply(strsplit(path, "/", fixed = TRUE),
-                                         function(x) x[2] %||% "", character(1))
+strsplit_first <- function(path) sub("^/([^/]*).*$", "\\1", path)
 
 # "../" once per level below the top: the <base href> that points a page at
 # the app root, or NULL for a top-level page.
 base_href <- function(path) {
-  depth <- lengths(regmatches(path, gregexpr("/", path, fixed = TRUE))) - 1L
+  depth <- lengths(strsplit(path, "/", fixed = TRUE)) - 2L
   if (depth > 0) strrep("../", depth)
 }
 
@@ -282,15 +279,14 @@ as_pages <- function(pages) {
   pages
 }
 
-# A ui function for shiny::shinyApp(uiPattern = ".*"). Returns the page's UI,
-# a redirect, a 404, or NULL for paths Shiny serves after the ui handler.
+# A ui function for shiny::shinyApp(uiPattern = ".*"): the page's UI, a
+# redirect, or a 404.
 page_router <- function(pages) {
   force(pages)
   function(req) {
     path <- req$PATH_INFO %||% "/"
     page <- pages[[path]]
     if (!is.null(page)) return(render_page(page, req, base_href(path)))
-    if (path == "/reactlog" || startsWith(path, "/reactlog/")) return(NULL)
     trimmed <- sub("/$", "", path)
     if (trimmed != path && trimmed != "/" && !is.null(pages[[trimmed]])) {
       # Relative, so it stays right under a proxy subpath.

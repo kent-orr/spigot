@@ -21,7 +21,7 @@ spigot_api <- function(file = NULL, envir = parent.frame()) {
   if (inherits(file, "Plumber")) return(file)
   pr <- if (is.null(file)) {
     plumber::pr(envir = envir)
-  } else if (is.character(file) && length(file) == 1 && !is.na(file)) {
+  } else if (is_string(file)) {
     if (!file.exists(file)) stop("plumber file not found: ", file, call. = FALSE)
     plumber::pr(file, envir = envir)
   } else {
@@ -33,5 +33,5 @@ spigot_api <- function(file = NULL, envir = parent.frame()) {
 }
 
 spigot_serializer <- function() {
-  plumber::serializer_content_type("application/json", function(val) spigot_json(val))
+  plumber::serializer_content_type("application/json", spigot_json)
 }

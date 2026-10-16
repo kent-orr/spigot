@@ -8,7 +8,7 @@
 
 # Shiny tokens are createUniqueId(16): 32 lowercase hex characters (F7).
 is_token <- function(x) {
-  is.character(x) && length(x) == 1 && !is.na(x) && grepl("^[0-9a-f]{16,}$", x)
+  is_string(x) && grepl("^[0-9a-f]{16,}$", x)
 }
 
 register_session <- function(session) {
@@ -16,28 +16,39 @@ register_session <- function(session) {
   if (!is_token(token)) {
     stop("Cannot register a session without a valid token.", call. = FALSE)
   }
-  if (identical(get0(token, envir = .registry, inherits = FALSE), session)) {
-    return(invisible(session))
-  }
   assign(token, session, envir = .registry)
-  session$onSessionEnded(function() unregister_session(token, session))
+  session$onSessionEnded(function() prune_session(session))
   invisible(session)
 }
 
-unregister_session <- function(token, session) {
+# Remove `session` from the registry. Called when it ends, and when a send
+# fails: the socket is gone even if Shiny has not noticed.
+prune_session <- function(session) {
+  token <- session$token
   if (identical(get0(token, envir = .registry, inherits = FALSE), session)) {
     rm(list = token, envir = .registry)
   }
   invisible()
 }
 
+is_closed <- function(session) {
+  is.function(session$isClosed) && isTRUE(session$isClosed())
+}
+
 # The live session for `token`, or NULL.
 lookup_session <- function(token) {
   if (!is_token(token)) return(NULL)
   session <- get0(token, envir = .registry, inherits = FALSE)
-  if (is.null(session)) return(NULL)
-  if (is.function(session$isClosed) && isTRUE(session$isClosed())) return(NULL)
+  if (is.null(session) || is_closed(session)) return(NULL)
   session
+}
+
+# Every registered session that is still open. Closed ones are pruned.
+live_sessions <- function() {
+  sessions <- unname(as.list(.registry, all.names = TRUE))
+  closed <- vapply(sessions, is_closed, logical(1))
+  for (session in sessions[closed]) prune_session(session)
+  sessions[!closed]
 }
 
 # Wrap the user's server function so each session registers before it runs.
@@ -88,14 +99,8 @@ spigot_session <- function(req) {
   req[["spigot_session"]]
 }
 
-# Remove `session` from the registry now, without waiting for onSessionEnded.
-# Used when a send fails: the socket is gone even if Shiny has not noticed.
-prune_session <- function(session) {
-  unregister_session(session$token, session)
-}
-
 check_event <- function(event) {
-  if (!is.character(event) || length(event) != 1 || is.na(event) || !nzchar(event)) {
+  if (!is_string(event) || !nzchar(event)) {
     stop("`event` must be a single non-empty string.", call. = FALSE)
   }
   invisible(event)
@@ -164,7 +169,7 @@ spigot_emit <- function(session, event, data = NULL) {
             "Was the endpoint called without a session token?", call. = FALSE)
     return(invisible(FALSE))
   }
-  if (!is.function(session$sendCustomMessage)) {
+  if (!is_session(session)) {
     stop("`session` must be a Shiny session or NULL.", call. = FALSE)
   }
   session$sendCustomMessage("spigot:event", event_message(event, data))
@@ -188,35 +193,26 @@ spigot_broadcast <- function(event, data = NULL, except = NULL, filter = NULL) {
     stop("`filter` must be a function of a session, or NULL.", call. = FALSE)
   }
 
-  targets <- list()
-  for (token in ls(.registry, all.names = TRUE)) {
-    session <- get0(token, envir = .registry, inherits = FALSE)
-    if (is.null(session)) next
-    if (is.null(lookup_session(token))) {
-      prune_session(session)
-      next
-    }
-    if (any(vapply(except, identical, logical(1), session))) next
-    if (!is.null(filter)) {
-      keep <- filter(session)
-      if (!is.logical(keep) || length(keep) != 1 || is.na(keep)) {
-        stop("`filter` must return TRUE or FALSE.", call. = FALSE)
-      }
-      if (!keep) next
-    }
-    targets[[length(targets) + 1L]] <- session
+  targets <- Filter(function(s) !any(vapply(except, identical, logical(1), s)),
+                    live_sessions())
+  if (!is.null(filter)) {
+    keep <- vapply(targets, function(s) {
+      k <- filter(s)
+      if (!is_flag(k)) stop("`filter` must return TRUE or FALSE.", call. = FALSE)
+      k
+    }, logical(1))
+    targets <- targets[keep]
   }
 
   message <- event_message(event, data)
-  sent <- 0L
-  for (session in targets) {
-    ok <- tryCatch({
-      session$sendCustomMessage("spigot:event", message)
-      TRUE
-    }, error = function(e) FALSE)
-    if (ok) sent <- sent + 1L else prune_session(session)
-  }
-  invisible(sent)
+  sent <- vapply(targets, function(s) tryCatch({
+    s$sendCustomMessage("spigot:event", message)
+    TRUE
+  }, error = function(e) {
+    prune_session(s)
+    FALSE
+  }), logical(1))
+  invisible(sum(sent))
 }
 
 # `except` as a list of root sessions. A module's `session` is a proxy; the
@@ -285,8 +281,7 @@ is_session <- function(x) {
 #' }
 #' }
 spigot_trigger <- function(session, name, value) {
-  if (!is.character(name) || length(name) != 1 || is.na(name) ||
-      !grepl("^[A-Za-z][A-Za-z0-9_.-]*$", name)) {
+  if (!is_string(name) || !grepl("^[A-Za-z][A-Za-z0-9_.-]*$", name)) {
     stop("`name` must be an input name: a letter, then letters, digits, ",
          "`_`, `.` or `-`.", call. = FALSE)
   }
@@ -328,7 +323,7 @@ trigger_store <- function(session) {
 # value spigot_trigger() kept; the input becomes that value. An id this
 # session does not hold gives NULL.
 resolve_trigger <- function(val, shinysession, name) {
-  if (!is.character(val) || length(val) != 1 || is.na(val)) return(NULL)
+  if (!is_string(val)) return(NULL)
   store <- shinysession$userData[[".spigot_triggers"]]
   if (is.null(store) || !exists(val, envir = store, inherits = FALSE)) return(NULL)
   value <- get(val, envir = store, inherits = FALSE)
