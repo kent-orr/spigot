@@ -19,8 +19,7 @@
 #' value with HTML escaped and `{{{name}}}` inserts it as raw HTML; neither
 #' is ever evaluated as R. Escaping covers `&`, `<`, `>` and `"` but not
 #' `'`, so put values in double-quoted attributes (`value="{{name}}"`). `{{> name}}` inserts `partials$name`, and a
-#' partial that is not in `partials` is an error (spigot does not look for
-#' whisker's `name.mustache` files).
+#' partial that is not in `partials` is an error when the page is created.
 #'
 #' @section Relative URLs:
 #' Relative URLs in every page resolve from the app's root: `href="about"`,
@@ -155,7 +154,7 @@ check_data <- function(data) {
 has_head_end <- function(x) grepl("</head\\s*>", x, ignore.case = TRUE)
 
 # Partials named in `{{> name}}` tags must be supplied. (A tag after a
-# delimiter change is not seen here; render_whisker() catches it.)
+# delimiter change is not seen here; DECISIONS, M10.)
 check_partial_refs <- function(texts, available) {
   for (where in names(texts)) {
     m <- regmatches(texts[[where]], gregexpr("\\{\\{\\s*>\\s*([^}[:space:]]+)\\s*\\}\\}",
@@ -170,31 +169,9 @@ check_partial_refs <- function(texts, available) {
   invisible()
 }
 
-# The one place whisker runs. whisker falls back to reading "<name>.mustache"
-# from the working directory for a partial it was not given; render from an
-# empty directory and make that case an error instead.
+# The one place whisker runs.
 render_whisker <- function(template, data, partials) {
-  in_dir(empty_dir(), withCallingHandlers(
-    whisker::whisker.render(template, data = data, partials = partials),
-    warning = function(w) {
-      msg <- conditionMessage(w)
-      if (startsWith(msg, "No partial")) {
-        stop("spigot_page(): ", sub(" or file .*$", "", msg), " in `partials`.", call. = FALSE)
-      }
-    }
-  ))
-}
-
-empty_dir <- function() {
-  dir <- file.path(tempdir(), "spigot-empty")
-  if (!dir.exists(dir)) dir.create(dir)
-  dir
-}
-
-in_dir <- function(dir, code) {
-  old <- setwd(dir)
-  on.exit(setwd(old))
-  force(code)
+  whisker::whisker.render(template, data = data, partials = partials)
 }
 
 # Split rendered HTML at its first </head> and hand both halves to Shiny as

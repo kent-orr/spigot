@@ -43,8 +43,7 @@ The template sees only \code{data}, never R variables. \code{{{name}}} inserts a
 value with HTML escaped and \code{{{{name}}}} inserts it as raw HTML; neither
 is ever evaluated as R. Escaping covers \code{&}, \code{<}, \code{>} and \verb{"} but not
 \verb{'}, so put values in double-quoted attributes (\code{value="{{name}}"}). \verb{\{\{> name\}\}} inserts \code{partials$name}, and a
-partial that is not in \code{partials} is an error (spigot does not look for
-whisker's \code{name.mustache} files).
+partial that is not in \code{partials} is an error when the page is created.
 }
 
 \section{Relative URLs}{

@@ -148,14 +148,6 @@ test_that("a partial the template uses but nobody supplied is an error at creati
                "\"b\"")
 })
 
-test_that("a missing partial at render is an error, not a file lookup", {
-  # Delimiter changes hide the partial from the creation-time scan.
-  p <- spigot_page("<html><head></head><body>{{=<% %>=}}<%> nav%></body></html>")
-  withr::local_dir(withr::local_tempdir())
-  writeLines("<p>from disk</p>", "nav.mustache")
-  expect_error(p$render(fake_req()), "nav")
-})
-
 test_that("spigot_page() validates its arguments", {
   expect_error(spigot_page(1), "template")
   expect_error(spigot_page(c("<a>", "<b>")), "template")

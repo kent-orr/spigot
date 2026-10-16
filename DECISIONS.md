@@ -542,3 +542,14 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   async call, and after a sync mount-level failure ("a mount-level failure is a JSON 500").
   PLAN M9 listed only the first two; the third is the same behaviour on the error path, not
   a further change.
+
+## 2026-10-16 — M10: partials are checked once, when the page is created
+
+- `render_whisker()` no longer runs whisker inside `setwd()` to an empty temp directory,
+  and no longer turns whisker's "No partial" warning into an error. `check_partial_refs()`
+  already rejects any `{{> name}}` not in `partials` when the page is created, with the
+  better message; `setwd()` on every request in a server is a global side effect.
+- What this gives up: a `{{> name}}` tag after a delimiter change (`{{=<% %>=}}`) is not
+  seen by the creation-time scan. Such an unknown partial now gets whisker's default: a
+  `name.mustache` file in the working directory if there is one, else a warning and empty
+  output. Accepted: the construction check catches every ordinary case.
