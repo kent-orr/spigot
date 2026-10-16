@@ -30,6 +30,9 @@ skip_if_no_chrome <- function(path = chrome_path()) {
     ))
   }
   if (!identical(Sys.getenv("CHROMOTE_CHROME"), path)) Sys.setenv(CHROMOTE_CHROME = path)
+  # chromote waits chromote.timeout seconds (default 10) for Chrome to start;
+  # a cold start on a CI runner can take longer.
+  if (is.null(getOption("chromote.timeout"))) options(chromote.timeout = 30)
   # Ubuntu 23.10+ blocks Chrome's user-namespace sandbox (DECISIONS.md, M0
   # step 0). The browser only loads our own localhost test app.
   if (Sys.info()[["sysname"]] == "Linux" &&
