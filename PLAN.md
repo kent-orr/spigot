@@ -1,487 +1,265 @@
-# PLAN: `spigot` — plumber endpoints inside a Shiny app
+# PLAN: spigot 0.1.1 — simplification pass
 
-> Working name. Check CRAN/GitHub availability before first commit.
->
-> Revision 2 (2026-10-15): milestones expanded into step-by-step instructions.
-> Assumptions about Shiny/plumber internals were verified against
-> shiny 1.14.0 (installed) and plumber `main` on GitHub (CRAN 1.3.3). See §4.0.
->
-> M0 complete (2026-10-15): all spikes recorded in DECISIONS.md; stale facts above corrected.
->
-> M1 complete (2026-10-15): F16–F18 added; `spigot_api()` signature changed (DECISIONS.md).
->
-> M2 complete (2026-10-15): F19–F20 added; `max_request_size` now defaults to `NULL` (DECISIONS.md).
+> The 0.1.0 build plan (M0–M7, 487 lines) is archived: `git show v0.1.0:PLAN.md`.
+> DECISIONS.md holds the record of what was decided and why; this file holds only
+> what is still to do.
 
-> M3 complete (2026-10-15): prefix reaches spigot.js as a `data-prefix` attribute; `spigot.on/off` and
-> the custom message handlers move to M4/M6; nested M5 pages need a `<base href>` (DECISIONS.md).
+This release changes no user-facing behaviour. It removes code that a review on
+2026-10-16 found to be carrying weight nothing needs: compatibility shims with no
+compatibility gain, machinery for states the code cannot reach, two mechanisms
+for one rule, and prose that lives in two places. Where a simplification makes
+spigot slightly more permissive, the plan says so and DECISIONS.md gets an entry.
 
-> M4 complete (2026-10-15): `spigot.on()` returns an unsubscribe function; `spigot_emit(NULL)` returns
-> `FALSE`; broadcast reaches every spigot session in the R process and takes `except =`/`filter =`
-> (DECISIONS.md).
+## 1. Ground rules
 
-> M5 complete (2026-10-16): `pages` replaces `ui` and also takes Shiny UI (top level only);
-> nested pages get a relative `<base href>`; `/about/` redirects (301, relative) instead of
-> being served (DECISIONS.md).
+- **Test-first.** Each step names the test change before the code change. Where a
+  behaviour is removed, its test is removed in the same commit, never left failing.
+- **Behaviour is the spec.** The e2e and integration tests (`test-client.R`,
+  `test-push.R`, `test-trigger.R`, `test-page.R`, `test-mount.R`) must pass unchanged
+  except where a step below says otherwise. A step that needs a test rewritten beyond
+  what is listed here has found a behaviour change; stop and record it in DECISIONS.md
+  before continuing.
+- **`.Rd` files are generated** by `devtools::document()`, never edited by hand.
+- **One commit per milestone**, suite green with Chrome (`skip_if_no_chrome()` must not
+  skip locally) before committing. CI (4 cells, including shiny 1.11.0) green before
+  M13.
+- **Line references** below are to the 0.1.0 sources (`56cf110`). They drift as earlier
+  milestones land; the function names are the stable anchor.
 
-> M6 complete (2026-10-16): `spigot_trigger()` passes the value by reference, so `input[[name]]`
-> is `identical()` to it; F21–F22 added (DECISIONS.md).
-
-> M7 complete (2026-10-16): examples, vignettes (plus `why-spigot` and `client`), pkgdown site
-> at https://kent-orr.github.io/spigot/ and CI (4 cells green); `shiny (>= 1.11.0)`, because older
-> shiny breaks hand-written forms (DECISIONS.md). Tagged `v0.1.0`.
-
-## 1. Goal
-
-Build Shiny "sites" where:
-
-- **Frontend** is hand-written HTML/JS (whisker templates + `fetch`/async), not `fluidPage`.
-- **Backend** is R: plumber 1.x routes mounted *inside* the Shiny process, same origin, same port.
-- The API exists **only for the app's own pages**. No external consumers, no public API.
-- Shiny still provides: hosting (Shiny Server / Connect / `runApp`), per-tab session state, and a server→client push channel.
-
-### Non-goals
-
-- Public/third-party API, API keys, versioning, rate limiting.
-- Replacing Shiny outputs/reactivity for people who want them (it stays available, opt-in).
-- Horizontal scaling beyond what Shiny already supports.
-- A JS build toolchain. Users may bring Vite/esbuild; the package only serves the output.
-
-## 2. Mental model (how reactivity fits)
-
-```
-Browser tab ──HTTP fetch──▶ /api/*  ──▶ plumber router ─┐
-     ▲                                                  │ same R process,
-     │                                                  │ same memory
-     └──websocket (Shiny session)◀── observers/push ◀───┘
-```
-
-| Channel | Direction | Use for | Reactive? |
-|---|---|---|---|
-| HTTP (`spigot.get/post`) | client → server → client | Queries, commands, form submits, data loads | No. Plain request/response |
-| Push (`spigot.on`) | server → client | Live updates, progress, server-initiated events | Driven by observers |
-| Bridge (`spigot_trigger`) | HTTP → reactive graph | When an API call should invalidate reactives | Yes, opt-in |
-
-Rules of thumb:
-
-- **Most apps need only HTTP.** Shiny is just the host plus the session.
-- Endpoints that are **session-bound** (see §4.2) can read session state with `isolate()` and push to that tab.
-- Reactivity is an **optional layer** for live views. It is not required for anything.
-
-## 3. User-facing API (target)
-
-### R
+## 2. Verification, every milestone
 
 ```r
-spigot_app(
-  pages,                 # named list: path -> spigot_page(), or a single page for "/"
-  server = NULL,         # optional Shiny server function (reactivity, push)
-  api,                   # plumber router or path to plumber file(s)
-  prefix = "/api",
-  require_session = TRUE,# reject API calls without a live session token
-  max_request_size = NULL        # bytes -> options(shiny.maxRequestSize); NULL leaves it alone
-)
-
-spigot_api(file = NULL, envir = parent.frame())  # plumber::pr() with spigot_json() as default serializer
-spigot_page(template, data = list(), partials = list(), cache = FALSE)
-spigot_session(req)                        # inside an endpoint: bound ShinySession or NULL
-spigot_emit(session, event, data)          # push to one tab
-spigot_broadcast(event, data, except, filter) # push to all live sessions (or some)
-spigot_trigger(session, name, value)       # set a reactive input from an endpoint
-spigot_dependency(prefix = "/api")          # htmltools dependency for spigot.js
+devtools::document()
+devtools::test()                        # Chrome installed; no e2e skips
+rcmdcheck::rcmdcheck(args = "--no-manual")
 ```
 
-### Endpoint example
-
-```r
-#* @post /cart/add
-function(req, sku, qty) {
-  s <- spigot::spigot_session(req)
-  cart <- add_to_cart(s$userData$cart_id, sku, as.integer(qty))
-  spigot::spigot_emit(s, "cart:changed", cart)   # optional live update
-  cart
-}
-```
-
-### JS (`spigot.js`)
-
-```js
-await spigot.ready;                                // resolves on shiny:sessioninitialized
-const cart = await spigot.post("cart/add", {sku, qty: 1});
-const rows = await spigot.get("forecast", {sku: "RKS0420", h: 12});
-await spigot.del("cart/item", {sku}, {timeout: 2000});  // also spigot.put(), spigot.request()
-spigot.on("cart:changed", renderCart);             // M4
-```
-
-- Relative URLs only (works under Shiny Server/Connect subpaths). `"x"` and `"/x"` both mean `{prefix}/x`.
-- Sends the session token header automatically; calls made before the session starts wait for it.
-- Rejects with `spigot.SpigotError {status, message, body}` on non-2xx; `status` is `0` for a timeout or network failure.
-- JSON in and out by default (`FormData`/`Blob`/`URLSearchParams`/`ArrayBuffer` bodies are sent as they are); raw `fetch` is still available for streams.
-
-## 4. Architecture
-
-### 4.0 Verified facts (2026-10-15, shiny 1.14.0, plumber main)
-
-These were read from source, not assumed. Re-verify when bumping either dependency.
-
-| # | Fact | Consequence for design |
-|---|---|---|
-| F1 | `shinyApp()` returns `structure(list(httpHandler, serverFuncSource, onStart, options, appOptions), class = "shiny.appobj")`. | Wrapping `app$httpHandler` and `app$serverFuncSource` is the whole mount. |
-| F2 | Shiny's HTTP chain order is `sessionHandler` → app `httpHandler` → `www/` static → `resourcePathHandler` → `reactLogHandler`. | `/session/<hex>/…` is reserved by Shiny. `prefix` must not collide with a resource path or `www/` folder. |
-| F3 | `uiHttpHandler()` only answers `GET` (unless `attr(ui, "http_methods_supported")` is set). | Our wrapper must intercept `/api/*` *before* delegating, so POST/PUT/DELETE never reach the UI handler. |
-| F4 | `HandlerManager$.httpServer` runs the handler's return through `promises::hybrid_chain()`. A promise is awaited; its value must be an `httpResponse` (or raw Rook list). | Returning `pr$call(req)` (possibly a promise) chained with `then(rook_to_httpResponse)` just works. |
-| F5 | Shiny's httpuv `onHeaders` rejects bodies over `getOption("shiny.maxRequestSize", 5 MB)` with 413 **before any handler runs**. plumber's `plumber.maxRequestSize` is only enforced inside `pr$run()`. | `spigot_app(max_request_size=)` sets `shiny.maxRequestSize`. Do not rely on plumber's option. |
-| F6 | Errors thrown by an app `httpHandler` become Shiny's HTML 500 page (`template/error.html`), subject to `shiny.sanitize.errors`. plumber catches endpoint errors itself and returns JSON 500. | Mount code must `tryCatch` its *own* failures and return JSON 500 so API clients never receive HTML. |
-| F7 | `session$token` is `createUniqueId(16)` (hex). `ShinySession$initialize` sends `config = list(workerId, sessionId = token, user)`. JS exposes it as `Shiny.shinyapp.config.sessionId`, set just before `shiny:sessioninitialized` fires (not at `shiny:connected`). | Token header value is exactly `session$token`. Validate with `^[0-9a-f]{16,}$` before registry lookup. |
-| F8 | `ShinySession$sendCustomMessage(type, message)` and `onSessionEnded(cb)` are public. `session$userData` is a public env. | No internals needed for push, registry cleanup, or per-tab state. |
-| F9 | `uiHttpHandler`: if `ui(req)` returns an `httpResponse`, it is passed through untouched; if it returns an `html_document` (from `htmlTemplate(..., document_ = TRUE)`), `renderPage()` injects jQuery + shiny.js + attached deps without wrapping it. | Pages can be full documents authored by the user and still get Shiny deps without touching internals (§4.3). |
-| F10 | `shinyApp(uiPattern = ".*")` is wrapped as `^.*$`. | Multi-page routing via `ui = function(req)` is supported publicly. |
-| F11 | `maybeInjectAutoreload()` and `shiny.http.response.filter` only act on `httpResponse` objects with `text/html` content. | Converting to `httpResponse` keeps devmode features working; JSON responses are untouched. |
-| F12 | plumber `Plumber$call(req)` sets `req$pr`, `req$.internal`, `req$args`, builds a `PlumberResponse`, then `serve()` → `res$toResponse()` = `list(status, headers, body)`. Body is `NULL` for 1xx/204/304. Promises in endpoints/filters/hooks are supported since plumber 1.0.0. | `req` must be the httpuv environment (plumber mutates it). Response conversion is a 10-line function. |
-| F13 | plumber's default `bodyFilter` does `req$bodyRaw <- req$rook.input$read()` once. | The mount must **not** read `rook.input` before `pr$call()`. If it ever must, call `rook.input$rewind()` after. |
-| F14 | `plumber.trailingSlash` defaults to `FALSE`; `plumber.methodNotAllowed` defaults to `TRUE` (405 when path exists under another verb). | After stripping the prefix, map `""` to `"/"`. Expect 405, not 404, for wrong-verb tests. |
-| F15 | Shiny's `sendCustomMessage` serialises with Shiny's `toJSON` settings (`auto_unbox = TRUE`). | Pre-serialise push payloads with our own `jsonlite::toJSON()` config and send a single string (§4.4). |
-| F16 | `shinyAppDir()` serves `www/` as an httpuv static path at `/`; httpuv answers non-GET requests under it with 400 before R runs. Static paths come from the *outer* appobj. | `mount_app()` adds `excludeStaticPath()` for the prefix via `getShinyOption("server")$setStaticPath()` on the first loop tick after `onStart` (DECISIONS.md M1). |
-| F17 | plumber copies the router's default serializer into each endpoint at creation; file endpoints without `@serializer` resolve it per request. | `spigot_api()` with no file returns a router that already has the serializer; a `Plumber` passed in is left unchanged. |
-| F18 | httpuv sets both `CONTENT_TYPE` and `HTTP_CONTENT_TYPE` (plumber reads the latter), plus `HEADERS`. | `fake_req()` mirrors this. |
-| F19 | Shiny's `onHeaders` reads `shiny.maxRequestSize` per request; a body without `Content-Length` but with `Transfer-Encoding` counts as `Inf`. | Setting the option in `onStart` works; chunked uploads always get 413 under a finite limit. |
-| F20 | `argsForServerFunc()` passes `session` (and `clientData`) only when named in the server's formals. | `wrap_server()` always takes `session` and mirrors this rule for the user's function. |
-| F21 | `applyInputHandler()`: an input without a `:type` whose value is an unnamed list is `unlist(recursive = TRUE)`ed; `"<name>:<type>"` runs the handler from `registerInputHandler()` with `(val, shinysession, name)`. | `spigot_trigger()` sends an id as `<name>:spigot.ref`; its handler returns the stored R value (DECISIONS.md M6). |
-| F22 | Shiny's `input` is `ReactiveValues$new(dedupe = FALSE)`; `priority: "event"` skips the client-side `InputNoResendDecorator` check. | Every trigger fires observers, even with the same value. |
-
-Environment on this dev machine: R 4.5.2, shiny 1.14.0, whisker 0.4.1, htmltools 0.5.9,
-jsonlite 2.0.0, promises 1.5.0, httr2 1.3.0, callr 3.8.0, testthat 3.3.2, later 1.4.8,
-future 1.70.0, httpuv 1.6.17, plumber 1.3.3, chromote 0.5.1 + Chrome for Testing 155
-(headless shell, run with `--no-sandbox`). mirai not installed. See DECISIONS.md step 0.
-
-### 4.1 Mounting
-
-- Replace `app$httpHandler` with a wrapper. Requests matching `^{prefix}(/|$)` have the prefix moved from `PATH_INFO` to `SCRIPT_NAME` (same trick as Shiny's own `routeHandler()`), then go to `pr$call(req)`. The result (value or promise) is chained with `rook_to_httpResponse()` (F4, F12).
-- Everything else returns `NULL` from the wrapper → falls through to the original handler and Shiny's static/resource handlers (F2).
-- The prefix is excluded from httpuv static serving at startup (F16), or API POSTs in an app dir with `www/` get 400.
-- **Risk:** depends on the `shiny.appobj` structure (F1). Mitigate by: asserting the structure at `spigot_app()` time and failing loudly; pinning `shiny (>= 1.14.0)` initially and walking the lower bound back in CI (now `>= 1.11.0`, DECISIONS.md M7); keeping `mount.R` the only file touching it.
-
-### 4.2 Session binding
-
-- `spigot_app()` wraps the user's `server` function. On session start it registers `session$token → session` in a package-level `new.env()` registry and removes the entry in `session$onSessionEnded()` (F8).
-- JS reads `Shiny.shinyapp.config.sessionId` (F7) and sends it as `X-Spigot-Session`.
-- The mount handler validates the header (hex), looks up the session, and sets `req$spigot_session` before `pr$call()`.
-- `require_session = TRUE`: missing or unknown token → 401 JSON. Only live pages of this app can call the API.
-- Cross-origin guard: if `Origin` (or `Referer` when `Origin` absent) is present and its host:port differs from `Host` → 403 JSON. Same-origin `fetch` always sends `Origin` on POST, and sends nothing on same-origin GET, so "absent" is allowed.
-- Cross-origin guard also accepts `X-Forwarded-Host` (proxies that rewrite `Host`) and normalises default ports (DECISIONS.md M2).
-- Body size: forward `max_request_size` to `options(shiny.maxRequestSize)` (F5, F19). Shiny answers 413 itself.
-
-### 4.3 Pages and templates (whisker)
-
-- `spigot_page()` renders a whisker template with `data`/`partials` into a complete HTML string.
-- **Delimiter conflict:** `htmlTemplate()` and whisker both use `{{ }}`. If whisker output were passed through `htmlTemplate(text_ = …)`, user *data* containing `{{ }}` would be evaluated as R. That is a code-injection hole, so option B from revision 1 is **rejected**.
-- **Chosen approach (verify in M0):** render with whisker; split the result once at the first `</head>`; feed the two halves as `HTML()` values into a fixed internal template:
-
-  ```r
-  htmltools::htmlTemplate(
-    text_ = "{{ head }}{{ headContent() }}</head>{{ rest }}",
-    head = HTML(head_part), rest = HTML(rest_part), document_ = TRUE
-  )
-  ```
-
-  `HTML()` values are never re-templated. Returning the `html_document` lets Shiny inject jQuery, shiny.js and `spigot_dependency()` publicly (F9). No string surgery on dependency HTML, no internals.
-- Templates without `</head>` → error at `spigot_page()` creation time with a clear message.
-- Multi-page: `ui` becomes a `function(req)` that routes on `req$PATH_INFO`, with `shinyApp(uiPattern = ".*")` (F10). Unknown paths → a 404 `httpResponse` (F9). `/about/` redirects to `../about`; nested pages get `<base href="../">` (as built, DECISIONS.md M5).
-- Render timing: per request by default. `cache = TRUE` renders once at first request and memoises the `html_document` (safe because `data` is static).
-
-### 4.4 Push
-
-- One custom message type, `spigot:event`, with payload `list(event = "<name>", json = "<pre-serialised string>")` (F15). JS does `JSON.parse(msg.json)` and dispatches to `spigot.on` listeners.
-- Serialiser config lives in one function, `spigot_json()`: `jsonlite::toJSON(x, auto_unbox = TRUE, null = "null", na = "null", digits = NA, dataframe = "rows")`. The same function serialises nothing else. Length-1 arrays are preserved with `I()`.
-- `spigot_broadcast()` iterates over the registry. Dead sessions are skipped and pruned.
-
-### 4.5 Reactive bridge (`spigot_trigger`)
-
-Problem: setting a `reactiveVal` from an HTTP handler happens outside Shiny's flush cycle, so outputs may not update until the next websocket event.
-
-As built (M0 step 5, M6): **round-trip, by reference.** `spigot_trigger(session, name, value)` keeps `value` in the session (`userData`) under a new id and sends custom message `spigot:set-input` `{name, id}`. JS calls `Shiny.setInputValue(name + ":spigot.ref", id, {priority: "event"})`; spigot's registered `spigot.ref` input handler swaps the id for the value (F21). `input[[name]]` is `identical()` to `value`, every trigger fires observers (F22), and the flush is Shiny's normal one. Option 2 (direct set + scheduled flush, needs internals) stays rejected.
-
-Server code then just uses `input$<name>` as usual.
-
-### 4.6 Concurrency
-
-- One R thread. A synchronous endpoint blocks every session in the process.
-- Document `promises::future_promise()` / `mirai` for anything over ~100 ms.
-- Promise results flow through the mount handler unchanged (F4, F12).
-- Expose `spigot_options(timeout = …)`. JS also enforces a client-side timeout via `AbortController`.
-
-## 5. Package layout
-
-```
-spigot/
-├── DESCRIPTION
-├── NAMESPACE                 # generated by roxygen2; never hand-edited
-├── DECISIONS.md              # outcome of each M0 spike, one dated entry per decision
-├── R/
-│   ├── app.R          # spigot_app(), page routing
-│   ├── mount.R        # httpHandler wrapping (ONLY file touching shiny.appobj structure)
-│   ├── rook.R         # rook ↔ httpResponse conversion, JSON error responses
-│   ├── session.R      # registry, spigot_session(), emit/broadcast/trigger
-│   ├── page.R         # spigot_page(), whisker + dependency injection
-│   ├── api.R          # spigot_api()
-│   ├── deps.R         # spigot_dependency()
-│   ├── json.R         # spigot_json(): the single serializer config
-│   └── utils.R
-├── inst/
-│   ├── js/spigot.js
-│   └── examples/
-│       ├── minimal/   # one page, one endpoint
-│       ├── live/      # push + spigot_trigger
-│       └── site/      # multi-page, partials, async endpoint
-├── (spikes/)          # M0 only; deleted in M1 (see git history)
-├── tests/testthat/
-│   ├── helper-req.R       # fake_req(): Rook request environment with rook.input
-│   ├── helper-server.R    # callr + httr2 harness, random port, readiness wait
-│   ├── helper-chrome.R    # skip_if_no_chrome(), tab helpers
-│   ├── test-json.R        # unit
-│   ├── test-rook.R        # unit
-│   ├── test-mount.R       # unit (fake req) + integration (live server)
-│   ├── test-session.R     # unit (fake session) + integration
-│   ├── test-page.R        # unit + integration
-│   ├── test-client.R      # e2e (chromote)
-│   ├── test-push.R        # e2e (chromote)
-│   └── test-trigger.R     # e2e (chromote)
-└── vignettes/
-    ├── getting-started.Rmd
-    └── reactivity.Rmd     # §2 expanded
-```
-
-**Imports:** shiny (>= 1.14.0), plumber (>= 1.0.0), whisker, htmltools, jsonlite, promises
-**Suggests:** testthat (>= 3.0), httr2, callr, chromote, future, later, roxygen2, knitr, rmarkdown
-
-**Conventions (from project rules):** test-first for every behaviour below; `.Rd` files are generated with `roxygen2` (`devtools::document()`), never edited by hand.
-
-## 6. Milestones (test-first)
-
-Each milestone follows the same loop:
-
-1. Write the test file(s) listed. Run `devtools::test(filter = "<name>")` and confirm they **fail** for the right reason (missing function, not a typo).
-2. Implement the smallest code that passes.
-3. Run the whole suite, then `devtools::document()` and `devtools::check()` (`--no-manual` is fine until M7).
-4. Commit with the milestone tag in the message, e.g. `M1: mount GET/POST through plumber`.
-
-Shared test harness (write during M1, reuse everywhere):
-
-- `fake_req(method = "GET", path = "/", query = "", body = NULL, headers = list())` → an environment shaped like httpuv's: `REQUEST_METHOD`, `PATH_INFO`, `SCRIPT_NAME = ""`, `QUERY_STRING` (with leading `?`), `HTTP_HOST = "127.0.0.1:1234"`, `CONTENT_TYPE` and `HTTP_CONTENT_TYPE`, `CONTENT_LENGTH` and `HTTP_CONTENT_LENGTH`, `HTTP_*` for each header, `HEADERS` (F18), and `rook.input` = an R6/list object with `read()`, `read_lines()`, `rewind()` over a raw vector. Lets most mount/session tests run with no server.
-- `start_app(app_dir_or_expr)` → `callr::r_bg()` running `shiny::runApp(..., port = httpuv::randomPort(), launch.browser = FALSE)`; polls `httr2::request(url)` until 200 or 10 s; returns `list(url, proc)`; `withr::defer(proc$kill())` in the caller.
-- `skip_if_no_chrome()` → `testthat::skip_if_not_installed("chromote")` plus `chromote::find_chrome()` is non-NULL (chromote ≥ 0.5 can also download one via `chromote::local_chrome_version()`; document that for CI).
-- `new_tab(url)` → `chromote::ChromoteSession$new()`, navigate, wait for `window.Shiny && Shiny.shinyapp.config` via `Runtime.evaluate` polling.
-
-### M0: Spikes (throwaway, `spikes/`)
-
-Goal: turn every "verify" in §4 into a recorded decision. Nothing from `spikes/` ships.
-
-**Step 0 — environment.**
-- `install.packages(c("plumber", "chromote"))`. plumber on CRAN is 1.3.3, chromote 0.5.1.
-- Install a browser for chromote: `chromote::local_chrome_version()` (downloads Chrome for Testing into the chromote cache) or a system Chromium. Record the chosen route in `DECISIONS.md` because CI will need it too.
-- Confirm `chromote::find_chrome()` returns a path.
-
-**Step 1 — mount reaches all verbs; `rook.input` behaviour** (`spikes/01-mount.R`).
-- Build `pr <- plumber::pr()` with `GET /`, `POST /echo` (returns `req$body`), `PUT /x`, `DELETE /x`.
-- Build `app <- shinyApp(ui = fluidPage(), server = function(...) {})`, then replace `app$httpHandler` with a wrapper that strips `/api` and calls `pr$call(req)` and converts the Rook list to `httpResponse` (prototype of `rook.R`).
-- `runApp(app, port = 8765)` in a `callr::r_bg()`; from the parent use `httr2` to hit each verb; assert status 200 and that POST echoes a JSON body.
-- Then add a second POST where the wrapper reads `req$rook.input$read()` *before* `pr$call()` without rewinding: confirm plumber sees an empty body. Add `rewind()` and confirm it recovers. Record: "never pre-read; if you must, rewind" (F13).
-- Record also whether `req$PATH_INFO` is `""` or `"/"` after stripping `/api` exactly (F14).
-
-**Step 2 — promise from `httpHandler` is awaited** (`spikes/02-promise.R`).
-- Add endpoint `GET /slow` returning `promises::future_promise({ Sys.sleep(2); list(ok = TRUE) })` with `future::plan(multisession)`.
-- Fire `/slow` and `/` concurrently from two `httr2` requests (or `curl::multi_run`). Assert `/` returns in < 500 ms while `/slow` takes ≥ 2 s. This proves both F4 and that the process is not blocked.
-
-**Step 3 — session token on the JS side** (`spikes/03-token.R`).
-- App with `server = function(input, output, session) { message("TOKEN ", session$token) }`.
-- Open the page in chromote, evaluate `Shiny.shinyapp.config.sessionId`, compare with the logged token. Expect equality (F7).
-- Also time how long after page load the field exists (needed for `spigot.ready` design): poll from `DOMContentLoaded` until defined, log ms.
-
-**Step 4 — whisker page + Shiny deps** (`spikes/04-page.R`).
-- Write a whisker template that is a full document with `<head>…</head>` and `{{title}}` / `{{#items}}` / `{{> footer}}` usage.
-- Implement the §4.3 split-and-`htmlTemplate` approach as `ui <- function(req) …` returning the `html_document`.
-- Open in chromote. Assert in the DOM: exactly one `script[src*="shiny"]`, exactly one jQuery, `Shiny.shinyapp` defined, and a `data = list(title = "{{ Sys.getenv('HOME') }}")` renders *literally* (no evaluation). That last assertion is the injection test that kills option B.
-- Record the chosen approach and the exact head-split rule in `DECISIONS.md`.
-
-**Step 5 — bridge latency** (`spikes/05-trigger.R`).
-- Endpoint `POST /tick` that does `session$sendCustomMessage("spigot:set-input", list(name = "tick", value = Sys.time()))`. JS handler calls `Shiny.setInputValue("tick", v, {priority: "event"})`. Server has `observeEvent(input$tick, session$sendCustomMessage("pong", Sys.time()))`.
-- From chromote, POST `/api/tick` 50 times and measure fetch-resolve → pong-received latency in the browser. Report median and p95.
-- Decision rule: if p95 < 50 ms on localhost, option 1 is adopted and option 2 is closed.
-
-**Exit:** `DECISIONS.md` has one dated entry per step (0–5) with the evidence (numbers, versions). `spikes/` is left in the tree until M1 is merged, then deleted.
-
-### M1: Mount
-
-**Tests first** (`test-json.R`, `test-rook.R`, `test-mount.R`, helpers):
-
-1. `helper-req.R` with `fake_req()` as specified above. Test the helper itself: `rook.input$read()` returns the raw body, a second `read()` returns `raw(0)`, `rewind()` restores.
-2. `test-json.R`: `spigot_json()` round-trips: scalar → unboxed; `I(1)` → `[1]`; `NA` → `null`; `NULL` → `null`; nested list; data frame → row objects; Date/POSIXct → ISO strings.
-3. `test-rook.R`: `rook_to_httpResponse(list(status, headers, body))`:
-   - `Content-Type` in plumber headers becomes `content_type`; it is removed from `headers`.
-   - Missing content type → `application/octet-stream` for raw, `text/plain` for character.
-   - Body `NULL` (204) → `content = ""`. Raw body passes through unchanged. Character body is UTF-8.
-   - Other headers (e.g. `Set-Cookie`, `Cache-Control`) preserved; `X-Content-Type-Options: nosniff` added by `httpResponse`.
-   - `json_error(status, message)` returns an `httpResponse` with `application/json` and `{"error": …}`.
-4. `test-mount.R`, **unit** (fake req, no server). Build `h <- spigot_mount_handler(pr, prefix = "/api", fallback = function(req) NULL)` and assert:
-   - `GET /api/items` → 200, JSON array; `POST /api/items` with JSON body → 201 and echoes parsed body; `PUT`, `DELETE` reach their routes.
-   - `/api` and `/api/` both hit the `GET /` endpoint (F14).
-   - `/apix/foo`, `/`, `/other` → handler returns `NULL` (fall-through), and `req$PATH_INFO` is untouched afterwards.
-   - `/api/nope` → 404 JSON from plumber; `POST /api/items-only-get` → 405 (F14).
-   - Endpoint that `stop()`s → 500 JSON from plumber, not HTML.
-   - Mount-level failure (simulate with `pr` whose `call` throws) → 500 JSON via our `tryCatch` (F6).
-   - Prefix validation: `"api"`, `"/api/"`, `"/"`, `"/session"` are rejected with clear errors at construction.
-   - Async: endpoint returns `promises::promise_resolve(list(a=1))`; handler returns a promise; after `promises::then` the value is an `httpResponse` with status 200 (drive with `later::run_now()`).
-5. `test-mount.R`, **integration** (live server via `start_app()`): same verbs through real httpuv; binary body (raw PNG bytes) round-trips byte-exact via a `serializer_octet` endpoint; a `future_promise` endpoint returns while a concurrent `/` request completes first (issue the slow request from a separate `callr` process; a shared curl pool serialises them, see DECISIONS.md step 2); page route `/` still served by Shiny; `/www`-style static file still served.
-
-**Implement:**
-
-6. `R/json.R`: `spigot_json()`.
-7. `R/rook.R`: `rook_to_httpResponse()`, `json_error()`.
-8. `R/api.R`: `spigot_api(file = NULL, envir)` → `plumber::pr(file, envir = envir)` with `pr$setSerializer()` set to a serializer that calls `spigot_json()` itself (one config, one place). A `Plumber` object is returned unchanged (F17).
-9. `R/mount.R`: `spigot_mount_handler(pr, prefix, fallback, guard = NULL)` returning `function(req)`. Logic in order: prefix match → `on.exit` restore of `SCRIPT_NAME`/`PATH_INFO` → optional `guard(req)` (M2) → `tryCatch(pr$call(req))` → `promises::hybrid_chain` style: if promise, `then(rook_to_httpResponse)`; else convert directly. `mount_app(app, handler)` asserts `inherits(app, "shiny.appobj")` and `is.function(app$httpHandler)` then replaces the field (F1). This is the only function that knows the appobj shape.
-10. `R/app.R` skeleton: `spigot_app(pages = NULL, server = NULL, api, prefix = "/api", ...)` that for now takes `ui` (M5 replaces this) and returns the mounted `shiny.appobj`.
-
-**Exit:** unit + integration tests green; `R CMD check` has no errors; `spikes/` deleted.
-
-### M2: Session binding and request guards
-
-**Tests first** (`test-session.R`):
-
-1. Unit, registry: `fake_session(token)` is a list/R6 with `token`, `userData`, `sendCustomMessage` (records calls), `onSessionEnded(cb)` (stores cb and exposes `end()` to fire it). Assert: `register_session(s)` then `lookup_session(token)` is `s`; after `s$end()` lookup is `NULL`; registering twice is idempotent; tokens are not case-folded.
-2. Unit, server wrapper: `wrap_server(user_server)` returns a function with the same formals (`input, output, session`), calls `register_session` first, then the user server; a user server with only `(input, output)` is also accepted (Shiny permits it).
-3. Unit, guard via `fake_req()` + mount handler with `guard = session_guard(require_session = TRUE)`:
-   - valid header, registered token → endpoint sees `spigot_session(req)` identical to the fake session.
-   - header missing → 401 JSON `{"error":"session required", "hint": …}` (hint added after M3); unknown token → 401; token of an ended session → 401; non-hex token (`"../x"`) → 401 without touching the registry.
-   - `require_session = FALSE`: missing header → endpoint runs, `spigot_session(req)` is `NULL`; present and valid → bound.
-   - `Origin: http://evil.test` with `Host: 127.0.0.1:1234` → 403; matching origin → passes; `Origin` absent but `Referer` cross-host → 403; both absent → passes.
-   - Guard rejections short-circuit: the plumber router is never called (spy with a `pr` stub counting calls).
-4. Integration: `start_app()` an app whose server records `session$token` to a temp file; from R, POST to `/api/whoami` with that token → 200; with a random token → 401. Oversize body: app started with `max_request_size = 1024`; a 2 KB POST → 413 and the response body is Shiny's plain-text message (F5), so document that this status is not JSON.
-5. e2e (chromote, `skip_if_no_chrome()`): tab loads page; `fetch("api/whoami", {headers: {"X-Spigot-Session": Shiny.shinyapp.config.sessionId}})` → 200 with the same token echoed. Closing the tab, then replaying the token from R → 401 within 1 s (registry cleanup on `onSessionEnded`).
-
-**Implement:**
-
-6. `R/session.R`: `.registry <- new.env(parent = emptyenv())`; `register_session()`, `lookup_session()`, `spigot_session(req)` (reads `req$spigot_session`, errors if `req` is not a Rook env), `wrap_server()`.
-7. `R/mount.R`: `session_guard(require_session)` + `origin_guard()`; they return `NULL` to continue or an `httpResponse` to short-circuit. Header name constant `SPIGOT_HEADER <- "HTTP_X_SPIGOT_SESSION"`.
-8. `R/app.R`: `spigot_app()` wires `wrap_server()`, both guards, and `onStart` that sets `options(shiny.maxRequestSize = max_request_size)` (restore the previous value in `onStop`).
-
-**Exit:** all of the above green; vignette note drafted on why 413 is plain text.
-
-### M3: JS client
-
-**Tests first** (`test-client.R`, all e2e under `skip_if_no_chrome()`; the app fixture serves `spigot_dependency()` plus endpoints `GET /echo-query`, `POST /echo-json`, `GET /fail?status=`, `GET /slow?ms=`):
-
-1. `await spigot.ready` resolves and `spigot.sessionId === Shiny.shinyapp.config.sessionId`. Calling `spigot.get` *before* ready queues until ready (no thrown error).
-2. `spigot.get("echo-query", {a: 1, b: "x y", c: [1,2]})` → server saw `a=1&b=x%20y&c=1&c=2`; arrays repeat the key; `null`/`undefined` values omitted.
-3. `spigot.post("echo-json", {k: [1]})` → request `Content-Type: application/json`, response parsed object equals input.
-4. Non-2xx → rejection is `instanceof SpigotError` with `status`, `message` (from JSON `error` field when present, else statusText) and `body` (parsed JSON or text).
-5. `spigot.get("slow", {ms: 3000}, {timeout: 500})` → rejects with `SpigotError` where `status === 0` and `message` mentions timeout; the server request is aborted (`AbortController`).
-6. Relative URLs: the test page is served at `/sub/app/` behind a tiny httpuv reverse proxy started in the test (strip `/sub/app`, forward to the Shiny port). `spigot.get("echo-query")` must hit `/sub/app/api/echo-query`. Also verify `spigot.get("/echo-query")` (leading slash) is normalised, not treated as absolute.
-7. Header names: `X-Spigot-Session` is sent on every request; a custom `headers` option merges without overriding it.
-8. `spigot_dependency()` unit test (no browser): returns an `html_dependency` named `spigot` whose script file exists under `system.file("js", package = "spigot")`.
-
-**Implement:**
-
-9. `inst/js/spigot.js` as a plain ES5-compatible IIFE that assigns `window.spigot` (decision on ES module in §7 Q4; IIFE first because it works with zero build). Contents: `ready` promise resolved on `shiny:sessioninitialized` (`$(document).on("shiny:sessioninitialized", …)`; `config.sessionId` is **not** set yet at `shiny:connected`, see DECISIONS.md step 3), resolving immediately if `Shiny.shinyapp.config.sessionId` is already set when the script runs; `base` computed as `document.baseURI` directory + prefix (prefix injected by `spigot_dependency()` via a `<script>` data attribute or `window.__spigot = {prefix}`); `request(method, path, {query, body, headers, timeout})`; `get`, `post`, `put`, `del`; `SpigotError` class; `on(event, fn)` / `off` registry (used in M4); `Shiny.addCustomMessageHandler("spigot:event", …)` and `"spigot:set-input"` (used in M6).
-10. `R/deps.R`: `spigot_dependency(prefix)` → `htmlDependency("spigot", version, src = c(file = "js"), package = "spigot", script = "spigot.js", head = sprintf('<script>window.__spigot={prefix:"%s"}</script>', prefix))`. `spigot_app()` attaches it to every page.
-
-**Exit:** e2e green locally with Chrome; the proxy-prefix test passes.
-
-**As built (DECISIONS.md M3):** step 10 passes the prefix as a `data-prefix` attribute on the script
-tag, not a `head` script (htmltools renders `head` after the script). The `on`/`off` registry and the
-two custom message handlers from step 9 are written in M4 and M6 with their tests.
-
-### M4: Push
-
-**Tests first** (`test-push.R`):
-
-1. Unit: `spigot_emit(fake_session, "cart:changed", list(n = 1))` calls `sendCustomMessage("spigot:event", list(event = "cart:changed", json = "<string>"))` exactly once, and the `json` string parses back to `{"n":1}`. `spigot_emit(NULL, …)` is a no-op with a warning (endpoint called without session).
-2. Unit: `spigot_broadcast()` with three registered fake sessions sends to all three; after one `end()`s, only two receive; a session whose `sendCustomMessage` throws (closed socket race) is pruned and does not stop the others.
-3. Unit: payload shapes via `spigot_json()`: nested list, `I(1)` → `[1]`, `NA` → `null`, `character(0)` → `[]`, data frame → row objects, named list → object.
-4. e2e: two chromote tabs on the same app. Endpoint `POST /ping-me` emits to `spigot_session(req)` only; the calling tab's `spigot.on("ping", …)` fires once, the other tab's never (wait 500 ms). `POST /ping-all` → both fire. Listener registered with `spigot.on` can be removed with `spigot.off`; a second listener for the same event also fires. Payload with `I(1)` arrives as a JS array of length 1.
-
-**Implement:**
-
-5. `R/session.R`: `spigot_emit()`, `spigot_broadcast()`, `prune_session()`.
-6. `inst/js/spigot.js`: `spigot:event` handler → `JSON.parse(msg.json)` → listeners by event name, each in `try/catch` so one bad listener does not block the rest.
-
-**Exit:** green; add a "live" section to the reactivity vignette draft.
-
-### M5: Pages
-
-**Tests first** (`test-page.R`):
-
-1. Unit: `spigot_page(template = "<html><head><title>{{title}}</title></head><body>{{#items}}<li>{{.}}</li>{{/items}}{{> foot}}</body></html>", data = list(title = "T", items = 1:2), partials = list(foot = "<p>f</p>"))` → calling the page's render function returns an `html_document`; `as.character()` of it contains `<title>T</title>`, two `<li>`, `<p>f</p>`.
-2. Unit: `template` may be a file path (read with `readLines(encoding = "UTF-8")`) or a string; non-ASCII round-trips.
-3. Unit: `data = list(title = "{{ Sys.getenv('HOME') }}")` renders the braces literally (whisker escapes HTML; `{{{ }}}` for raw) and never evaluates R (the injection test from M0 step 4).
-4. Unit: template without `</head>` → error naming the template. Template with uppercase `</HEAD>` is accepted (case-insensitive split).
-5. Unit: `data` may be a function `function(req)` evaluated per request (`req$QUERY_STRING` visible to the template). With `cache = TRUE` and a function `data`, construction errors ("cache requires static data").
-6. Integration (`start_app()` with `pages = list("/" = p1, "/about" = p2)`): `GET /` → p1 HTML with `shiny.min.js`, `jquery`, and `spigot.js` each present **exactly once** in `<head>`; `GET /about` and `/about/` → p2; `GET /missing` → 404 with `text/html` and the spigot 404 body; `GET /api/...` still works (mount precedes pages); `POST /about` → 404/405 not a page.
-7. Integration: a page with `cache = TRUE` and `data = list(t = Sys.time())`-style value: two requests return identical bodies; with `cache = FALSE` and `data = function(req) list(t = format(Sys.time(), "%OS6"))` two requests differ.
-8. Integration: `pages = p1` (single page, not a list) serves it at `/`.
-
-**Implement:**
-
-9. `R/page.R`: `spigot_page()` returns an object of class `spigot_page` holding template text, `data`, `partials`, `cache`, and a `render(req)` closure implementing the §4.3 split + `htmlTemplate(document_ = TRUE)` + `attachDependencies(spigot_dependency())`.
-10. `R/app.R`: `page_router(pages)` → `ui <- function(req)` that normalises `PATH_INFO`, picks the page, calls `render(req)`, or returns `httpResponse(404, …)`. `shinyApp(ui, server, uiPattern = ".*")`. Path keys are validated (`^/` and no trailing slash except `/`).
-
-**Exit:** green; `getting-started.Rmd` can be written against the real API.
-
-**As built (DECISIONS.md M5):** a top-level page may also be any Shiny UI; `spigot_app()`, not
-`render()`, attaches spigot.js (step 9). Nested paths (`/docs/intro`) take `spigot_page()`s and
-get a relative `<base href>`, with spigot.js keeping `#fragment` clicks on the page. `/about/`
-gets a relative 301 to `/about` rather than the page (step 6). `/reactlog` falls through to Shiny.
-
-### M6: Reactive bridge
-
-**Tests first** (`test-trigger.R`):
-
-1. Unit: `spigot_trigger(fake_session, "cart", list(n = 2))` sends `sendCustomMessage("spigot:set-input", list(name = "cart", json = "<string>"))`. Name validation: must match `^[A-Za-z][A-Za-z0-9_.-]*$`, else error. `NULL` session → error (a trigger without a session is meaningless, unlike emit).
-2. e2e: app server has `observeEvent(input$cart, spigot_emit(session, "cart:observed", input$cart))`. From the tab: `await spigot.post("cart/add")` (endpoint calls `spigot_trigger(s, "cart", x)`) → `spigot.on("cart:observed")` fires exactly once with payload `x`.
-3. e2e: five rapid POSTs with the **same** value → observer fires five times (`priority: "event"`), measured by a counter in the tab.
-4. e2e: trigger latency median < the bound recorded in `DECISIONS.md` step 5 (regression guard, generous: 5× the spike's p95).
-5. e2e: the value shape passes through `spigot_json()` → `JSON.parse` → `setInputValue` so `I(1)` arrives in R as a length-1 list, and `NA` as `NULL`. Document this in the vignette.
-
-**Implement:**
-
-6. `R/session.R`: `spigot_trigger()`.
-7. `inst/js/spigot.js`: `spigot:set-input` handler → `Shiny.setInputValue(msg.name, JSON.parse(msg.json), {priority: "event"})`.
-
-**Exit:** green; reactivity vignette complete.
-
-**As built (DECISIONS.md M6):** the value goes by reference, not as JSON (F21 showed Shiny
-unlists unnamed lists), so `input[[name]]` is `identical()` to the value; test 5 checks that
-instead. The message is `{name, id}` and the input is set as `<name>:spigot.ref` (steps 1, 7).
-A module's session namespaces `name`. The vignette draft is `?spigot_trigger`; M7 writes it.
-
-### M7: Examples, docs, release prep
-
-1. `inst/examples/minimal`: one page, `GET /api/hello`. `inst/examples/live`: counter with `spigot_emit` + `spigot_trigger`. `inst/examples/site`: three pages, partials, one `future_promise` endpoint. Each has an `app.R` that calls `spigot_app()`.
-2. Smoke test `test-examples.R`: for each example, `start_app()` it, `GET /` is 200 and contains `spigot.js`, one API call returns 200. Runs under `skip_on_cran()`.
-3. Vignettes: `getting-started.Rmd` (walks `minimal` then `site`), `reactivity.Rmd` (§2 expanded, with the three channels and when to use each, plus the concurrency warning from §4.6).
-4. `devtools::document()`; every exported function has `@param`, `@return`, `@examples` (wrapped in `\dontrun{}` where a server is needed).
-5. `devtools::check()` clean: 0 errors, 0 warnings, 0 notes other than the usual "new submission".
-6. pkgdown site (`_pkgdown.yml`, `.github/workflows/pkgdown.yaml`) deployed to GitHub Pages at `https://kent-orr.github.io/spigot/`; README and NEWS.
-7. CI (`.github/workflows/R-CMD-check.yaml`): matrix of R release / oldrel × shiny CRAN / shiny GitHub `main`, plumber CRAN. Chrome via `browser-actions/setup-chrome` or `chromote::local_chrome_version()` in a setup step. e2e tests `skip_if_no_chrome()` so a matrix cell without Chrome still runs unit + integration.
-8. Lower the `shiny` version pin: add a matrix cell with the oldest shiny that passes (try 1.8.0; F1/F4/F9 have been stable since well before that). Pin to the oldest green version.
-9. Tag `v0.1.0`.
-
-## 7. Open questions
-
-1. Expose plumber filters (auth/logging) per app, or wrap them in `spigot_*` helpers?
-2. File uploads: route through plumber multipart, or keep Shiny's `fileInput` channel? (Note F5: either way the limit is `shiny.maxRequestSize`.)
-3. Should `spigot_session()` also expose `session$userData` helpers for typed per-tab state?
-4. Should `spigot.js` ship as plain IIFE only (M3 default), or also an ES module generated from the same source?
-5. Docs page: serve `openapi.json` at `{prefix}/openapi.json` for dev only (`options(spigot.dev = TRUE)`)? plumber's `pr$getApiSpec()` makes this cheap.
-6. Should the origin guard be configurable (`allow_origins =`) for apps embedded in iframes on another host?
-
-## 8. Risks
-
-| Risk | Impact | Mitigation |
-|---|---|---|
-| Shiny changes `shiny.appobj` fields or `hybrid_chain` handling (F1, F4) | Mount breaks | Isolate in `mount.R`; assert structure at startup and fail loudly; CI against shiny `main` |
-| Sync endpoint blocks all sessions | Perceived hangs | Docs; optional dev-mode warning when a handler exceeds N ms |
-| Session token exposure | Another user replays the token | Token is per-tab and already sent over the same websocket; HTTPS assumed; tokens die with the session; origin guard |
-| Template injection through `htmlTemplate` | Remote code execution | Never pass whisker output through `htmlTemplate` text; only through `HTML()` values (§4.3, M5 test 3) |
-| `auto_unbox` / JSON shape drift | Frontend bugs | Single serializer `spigot_json()`; tests on shape edge cases in M1, M4; `spigot_trigger()` skips JSON (M6) |
-| 413 responses are plain text from Shiny, not JSON (F5) | Client parsing surprise | `SpigotError.body` falls back to text; documented |
-| plumber 1.x enters maintenance-only status | Long-term | Keep plumber usage behind `api.R`, `rook.R`, and `mount.R`. A plumber2 backend would be the sidecar design, a separate decision |
-| No Chrome on a CI runner or dev box | e2e silently skipped | `skip_if_no_chrome()` prints a visible skip; CI has at least one cell with Chrome and treats skips there as failures (`testthat::set_max_fails`/custom reporter) |
+Expectation count at 0.1.0: 965. It goes **down** in M8–M10 (tests for removed
+behaviour) and should otherwise be flat. A rise means a step added a test that this
+plan did not call for; that is fine, but note it in the commit message.
+
+## 3. Milestones
+
+### M8: R internals
+
+Four independent cleanups in `R/`, one commit. None changes a message that a test
+matches, except where noted.
+
+**8.1 One scalar check.** `is_string()` lives in `R/page.R:113`; eight other sites
+spell it out.
+
+1. Test: new `test-utils.R` with cases for `is_string()` and `is_flag()` (neither has
+   a unit test today; `test-helpers.R` tests the test helpers, not `R/utils.R`).
+   `is_string()`: accepts a length-1 non-NA character; rejects `NA_character_`,
+   `character(0)`, `c("a","b")`, `1`.
+2. Move `is_string()` to `R/utils.R`. Use it at `R/api.R:24`, `R/examples.R:41`,
+   `R/mount.R:7` (`check_prefix`), `R/session.R:11` (`is_token`), `:98` (`check_event`),
+   `:288` (`spigot_trigger` name), `:331` (`resolve_trigger`).
+3. Use `is_flag()` for the `filter` return check at `R/session.R:202`.
+4. `spigot_emit()` at `R/session.R:167` checks `is.function(session$sendCustomMessage)`;
+   `spigot_trigger()` uses `is_session()`. Both use `is_session()`. The error text
+   ("`session` must be a Shiny session or NULL.") stays; `test-push.R:45` matches on
+   "session".
+
+**8.2 Checks for unreachable states.**
+
+1. `mount_app()` (`R/mount.R:74-81`): delete the `shiny.appobj` and `httpHandler`
+   checks. It is internal and only ever receives `shiny::shinyApp()`'s result. (Its
+   message also claimed shiny >= 1.14.0 while DESCRIPTION says 1.11.0.) Delete the
+   test `test-mount.R:157` "mount_app() only accepts a shiny.appobj with an httpHandler".
+2. `register_session()` (`R/session.R:19-21`): delete the idempotency early return.
+   Only `wrap_server()` calls it, once per session. Delete `test-session.R:15`
+   "registering twice is idempotent" and the `callbacks()` counter in
+   `helper-session.R` (that test is its only reader).
+3. `spigot_app()` (`R/app.R:75-76`): delete the two `missing()` checks. R's own
+   "argument "pages" is missing, with no default" is enough. No test matches them.
+
+**8.3 `spigot_broadcast()`.** `test-push.R:62-235` is the spec and does not change.
+`except =` and `filter =` stay; only the implementation shrinks.
+
+1. Add `live_sessions()` next to `lookup_session()`: `as.list(.registry, all.names =
+   TRUE)`, prune any whose `isClosed()` is `TRUE`, return the rest unnamed.
+2. Rewrite the body as three `Filter()`/`vapply()` passes over `live_sessions()`:
+   drop `except` (identity after `root_session()`), apply `filter` (every session
+   before any send, `is_flag()` on each result, as now), then send with the
+   `tryCatch` that prunes on failure. Return `invisible(sum(sent))`.
+3. `prune_session()` is a one-line alias of `unregister_session()`; inline it or
+   keep it, but not both names for one thing. `test-push.R:235` "prune_session()
+   removes only that session" tests the behaviour, so keep whichever name it calls.
+
+**8.4 Small things.**
+
+1. `page_router()` (`R/page.R:293`): delete the `/reactlog` special case and the test
+   `test-page.R:220`. A spigot app answers `/reactlog` with its own 404. **DECISIONS
+   entry:** reactlog is a development tool; a user who needs it under spigot can add a
+   page or open an issue.
+2. `strsplit_first()` (`R/page.R:242`): `sub("^/([^/]*).*$", "\\1", path)`.
+3. `base_href()` (`R/page.R:247`): `lengths(strsplit(path, "/", fixed = TRUE)) - 2L`
+   is the depth (`"/"` gives `-1`, `"/docs/intro"` gives `1`). The existing tests at
+   `test-page.R:276-310` cover every depth.
+4. `spigot_serializer()` (`R/api.R:36`): pass `spigot_json` itself, not
+   `function(val) spigot_json(val)`.
+
+### M9: Mount handler without path restore
+
+**Why.** `spigot_mount_handler()` (`R/mount.R:36-61`) restores `PATH_INFO` and
+`SCRIPT_NAME` after plumber answers: `on.exit` for sync results, `promises::finally()`
+for async, with an `async` flag to pick one. Shiny's `routeHandler` does the same
+because a routed handler may return `NULL` and let the next handler see the request.
+`shiny:::joinHandlers` (checked, 1.14.0) only moves to the next handler on `NULL`.
+After the rewrite, spigot's handler never returns `NULL`: the guard, `pr$call()`
+and `mount_failure()` all return a response. Nothing reads the request afterwards.
+
+1. Tests, `test-mount.R`:
+   - `:32` "the prefix moves from PATH_INFO to SCRIPT_NAME, then is restored": drop
+     the two `expect_identical(req$...)` lines after the call; rename to "...to
+     SCRIPT_NAME".
+   - `:101` "async endpoints return a promise of an httpResponse": drop the final
+     `expect_identical(req$PATH_INFO, "/api/async")`.
+   - `:113` "the prefix stays stripped until an async filter has finished routing":
+     keep. It now asserts that plumber sees the stripped path inside an async filter,
+     which is still worth pinning.
+   - `:41` "non-prefix paths fall through untouched": keep unchanged. The fallback
+     runs before any rewrite.
+2. Code: delete `old_script`, `restore()`, `async`, the `on.exit`, and the
+   `promises::finally(restore)` link. The handler becomes: match prefix or fall back;
+   rewrite `SCRIPT_NAME`/`PATH_INFO`; run guard; `pr$call(req)`; convert sync, or
+   `then(rook_to_httpResponse) |> catch(mount_failure)` for a promise; the outer
+   `tryCatch(error = mount_failure)` stays.
+3. **DECISIONS entry** with the `joinHandlers` reasoning above, so the M1 entry's
+   "restored when the request finishes" is visibly superseded.
+
+### M10: Partials are checked once
+
+**Why.** `check_partial_refs()` (`R/page.R:161`) errors at construction for any
+`{{> name}}` not in `partials`. `render_whisker()` (`R/page.R:178`) then also runs
+every render inside `setwd()` to an empty temp directory and promotes whisker's
+"No partial" warning to an error. The only case the second adds is a tag after a
+`{{=<% %>=}}` delimiter change. `setwd()` per request in a server is a global side
+effect, and the construction check is the one that gives the better error anyway.
+
+1. Tests, `test-page.R`:
+   - `:143` "a partial the template uses but nobody supplied is an error at creation":
+     keep. This is the surviving rule.
+   - `:151` "a missing partial at render is an error, not a file lookup": delete. It
+     writes `nav.mustache` to disk to prove the render-time guard; that guard goes.
+   - `:115` "cache = TRUE renders once": mocks `render_whisker`, so the function must
+     keep its name and signature.
+2. Code: `render_whisker()` becomes `whisker::whisker.render(template, data = data,
+   partials = partials)`. Delete `empty_dir()` and `in_dir()`.
+3. Docs: `?spigot_page` Templates section says a missing partial "is an error (spigot
+   does not look for whisker's `name.mustache` files)". Make it "is an error when
+   the page is created".
+4. **DECISIONS entry:** after a delimiter change, an unknown partial falls back to
+   whisker's default (a `.mustache` lookup in the working directory, else a warning
+   and empty output). Accepted: the construction check catches every ordinary case.
+
+### M11: spigot.js in current JavaScript
+
+**Why.** The file header says ES5 syntax, no build step. It also requires `fetch`,
+`Promise`, `URL` and `AbortController`. No browser has those and lacks `class`,
+arrow functions, `const`/`let`, template literals, spread or `async`/`await`. The ES5
+rule buys nothing and costs the hand-built promise in `request()`, the
+`Object.create(Error.prototype)` constructor, `withOption()`, and the `typeof X !==
+"undefined"` guards in `isRawBody()`.
+
+The e2e tests are the spec and do not change: `test-client.R:71-278`,
+`test-push.R:373-493`, `test-trigger.R`, and the browser tests in `test-page.R` and
+`test-examples.R`. Run them before and after.
+
+1. Baseline: ES2017 (the year `async`/`await` shipped everywhere `AbortController`
+   did). Say so in the header comment, replacing the ES5 sentence. Still no build
+   step; still served as is.
+2. Keep the IIFE and `"use strict"`. A top-level `const` in a classic script is a
+   global lexical binding shared with the page's own scripts, and the examples
+   declare `const $`. The IIFE is what keeps spigot's names private.
+3. Keep it a **classic** script, not `type="module"`. A module is deferred and sees
+   `document.currentScript === null`, which would break the `data-prefix` read at
+   line 12 and the load-order guarantee that `shiny.js` runs first.
+4. `SpigotError`: `class SpigotError extends Error` with `name`, `status`, `body` set
+   in the constructor. `test-client.R:202` checks `instanceof spigot.SpigotError`,
+   `.status`, `.message`, `.body`; `instanceof Error` must still hold.
+5. `request()`: an `async function`. Build `init` as now; wrap the body in
+   `Promise.race([timeout, run()])` where `timeout` rejects with the status-0
+   `SpigotError` after `options.timeout` ms and aborts the controller, and `run()`
+   awaits `spigot.ready`, sets the session header last, fetches and reads the body,
+   mapping a non-`SpigotError` rejection to the status-0 "network error" form.
+   `clearTimeout` in a `finally`. The semantics tested at `test-client.R:135`
+   (waits for `ready`), `:225` (timeout counts from the call, `signal.aborted`),
+   `:241` (network failure) and `:250` (header cannot be overridden) stay.
+6. `withOption()` becomes `{ ...options, query }` / `{ ...options, body }` (only when
+   the value is not `undefined`, as now).
+7. `isRawBody()`: drop the `typeof` guards; plain `instanceof` chain.
+8. Everything else (`encodeQuery`, `apiUrl`, `readBody`, listeners, `dispatch`,
+   handlers, `onFragmentClick`) is a mechanical conversion to `const`/`let`, arrows
+   and template literals. Do not change logic while converting.
+9. Docs: neither `vignettes/client.Rmd` nor `?spigot_dependency` mentions ES5.
+   `client.Rmd:11` says "plain JavaScript with no build step", which stays true.
+   Only the header comment of `spigot.js` changes.
+10. **DECISIONS entry:** ES2017 baseline and why; classic script and IIFE kept, with
+    the two reasons above.
+
+### M12: Help pages are reference, vignettes are narrative
+
+**Why.** `?spigot_dependency` documents the whole JavaScript API; `vignettes/client.Rmd`
+does it again. `?spigot_emit` and `?spigot_trigger` were written as the drafts of
+`vignettes/reactivity.Rmd` (DECISIONS, M4 and M6) and still read like it. Two copies
+to keep in sync on every behaviour change.
+
+Rule for each page: keep the first paragraph (what it is, when to call it), every
+`@param`, `@return`, `@examples`, and any sentence that states a **contract** (shapes,
+ordering guarantees, what errors). Move or delete **explanation** (how it works
+internally, design rationale, alternatives) if the vignette already has it; if the
+vignette does not, move it there, do not delete it.
+
+1. Before editing, diff each page against its vignette section and list the
+   sentences only the help page has. Those move to the vignette first.
+   - `?spigot_dependency` ↔ `client.Rmd` "Calling the API", "Errors", "The session",
+     "Events from R", "Links on nested pages".
+   - `?spigot_emit` ↔ `reactivity.Rmd` "Push" (the chat-room example is already there).
+   - `?spigot_trigger` ↔ `reactivity.Rmd` "The bridge".
+2. `?spigot_dependency`: the bulleted JS API list and the paths/bodies paragraph
+   become one paragraph naming `spigot.get()`, `spigot.post()`, `spigot.on()` and
+   `SpigotError`, then `vignette("client", package = "spigot")`. Keep the `prefix`
+   param, the `data-prefix` mechanism (that is the contract), and the example.
+3. `?spigot_emit`: keep the one-tab/all-tabs sentence, the `spigot_json()` shape
+   sentence, and the "an event can reach the page before the HTTP response" sentence
+   (contract). Delete the `future` worker paragraph and the "no replay" sentence;
+   `reactivity.Rmd:78-87` already has both. Keep the two examples.
+4. `?spigot_trigger`: keep the first paragraph, the "value never leaves R, input is
+   `identical()`" sentence (contract), the "fires every time, even with the same
+   value" sentence (contract), and the namespacing sentence. `reactivity.Rmd:90-123`
+   ("The bridge") already explains the id swap, the extra websocket trip, running
+   after the endpoint returns, and every-trigger-fires. Delete those paragraphs from
+   the page; only `priority: "event"` is named nowhere else, and it is an
+   implementation detail, so it goes too.
+5. `?spigot_app`: out of scope for this pass; its five sections are mostly contract.
+   Revisit if M12 goes well.
+6. `devtools::document()`; `rcmdcheck` must show no Rd cross-reference warnings;
+   `pkgdown::build_site()` locally and read the three pages and two articles once.
+
+### M13: Release 0.1.1
+
+1. `NEWS.md`: one entry. "Internal simplification; no change to behaviour. spigot.js
+   now uses current JavaScript syntax (ES2017), same browser support. A `{{> name}}`
+   partial missing from `partials` is caught when the page is created." Mention the
+   `/reactlog` 404 in one clause.
+2. `DESCRIPTION` version 0.1.1.
+3. Full suite with Chrome locally; push; all 4 CI cells green, including the
+   shiny 1.11.0 cell (the ES2017 change has nothing to do with shiny, but the e2e
+   tests there are the broadest browser check we have).
+4. `pkgdown` workflow green; site shows the trimmed pages.
+5. Tag `v0.1.1`.
+
+## 4. Deliberately not in this pass
+
+- `spigot_broadcast(except =)` could be expressed with `filter =` and dropped
+  (~20 lines with `check_except()` and `root_session()`). It is public API; removing
+  it is a 0.2.0 question, not a cleanup.
+- `run_example()`'s three functions could collapse onto `match.arg()`. Harmless as is.
+- `helper-proxy.R` (85 lines, 3 tests) is the heaviest test infrastructure for the
+  least verified payoff (DECISIONS, M2 and M3: real deployments unchecked). Keep until
+  a real Shiny Server or Connect deployment either confirms or replaces it.
+- The `looks_like_text()` template-or-path heuristic, the `later::later()` static-path
+  exclusion, the `</head>` split, by-reference `spigot_trigger()`, and the `<base href>`
+  plus fragment-click handler all have recorded reasons and stay.
