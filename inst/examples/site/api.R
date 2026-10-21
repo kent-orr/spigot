@@ -1,5 +1,6 @@
-# The site's API. `cars` and `predictors` are defined in app.R: spigot_app()
-# evaluates this file in app.R's environment.
+# The site's API. `car_data` and `predictors` are defined in R/data.R, which
+# Shiny loads before app.R; spigot_app() evaluates this file in app.R's
+# environment, which sees them.
 
 #* Cars whose model name contains `q` (ignoring case) and that do at least
 #* `min_mpg` miles per gallon.
@@ -7,9 +8,9 @@
 function(q = "", min_mpg = "") {
   min_mpg <- suppressWarnings(as.numeric(min_mpg))
   if (length(min_mpg) != 1 || is.na(min_mpg)) min_mpg <- -Inf
-  keep <- grepl(tolower(q), tolower(cars$model), fixed = TRUE) & cars$mpg >= min_mpg
+  keep <- grepl(tolower(q), tolower(car_data$model), fixed = TRUE) & car_data$mpg >= min_mpg
   # A data frame becomes an array of row objects.
-  list(rows = cars[keep, c("model", "mpg", "cyl", "hp", "wt")])
+  list(rows = car_data[keep, c("model", "mpg", "cyl", "hp", "wt")])
 }
 
 #* Regress mpg on one predictor and bootstrap a 95% interval for the slope.
@@ -28,7 +29,7 @@ function(res, x = "wt", reps = 1000) {
   }
 
   # Only these values are sent to the worker.
-  data <- cars[c("mpg", x)]
+  data <- car_data[c("mpg", x)]
   app_pid <- Sys.getpid()
   promises::future_promise({
     started <- Sys.time()

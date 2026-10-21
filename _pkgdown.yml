@@ -39,5 +39,6 @@ articles:
     contents:
       - why-spigot
       - getting-started
+      - flask-flow
       - reactivity
       - client

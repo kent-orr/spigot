@@ -92,6 +92,18 @@ smoke <- list(
     cars <- hit_text(hit(paste0(u, "/cars")))
     expect_identical(lengths(regmatches(cars, gregexpr("<tr data-car=", cars))), 32L)
 
+    # Scripts and the stylesheet come from static/: the app's at /static, each
+    # blueprint's at <prefix>/static, which its pages see as {{static}}.
+    expect_match(cars, '<link rel="stylesheet" href="static/site.css">', fixed = TRUE)
+    expect_match(cars, '<script src="cars/static/cars.js"></script>', fixed = TRUE)
+    expect_match(hit_text(hit(paste0(u, "/model"))), '<script src="model/static/model.js"></script>',
+                 fixed = TRUE)
+    for (f in c("static/site.css", "cars/static/cars.js", "model/static/model.js")) {
+      r <- hit(paste0(u, "/", f))
+      expect_identical(httr2::resp_status(r), 200L, info = f)
+      expect_match(httr2::resp_content_type(r), "css|javascript", info = f)
+    }
+
     r <- hit(paste0(u, "/api/cars?q=merc"), headers = h)
     expect_identical(httr2::resp_status(r), 200L)
     rows <- httr2::resp_body_json(r)$rows

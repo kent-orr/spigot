@@ -184,34 +184,46 @@ Whatever the setting, requests from pages on another origin get a `403`.
 ## The site example
 
 `site` is a small site about R's `mtcars` data with three pages: a home page, a table of the
-cars, and a page that fits a regression. It shows templates with data, shared partials, and
-an endpoint whose work runs in another R process.
+cars, and a page that fits a regression. It shows templates with data, shared partials,
+blueprints, and an endpoint whose work runs in another R process.
 
 ```
 site/
 ├── app.R
 ├── api.R
-├── pages/      # one template per page
+├── R/                  # loaded by Shiny before app.R
+│   ├── data.R          # the data, and a page() helper
+│   ├── pages-cars.R    # the cars blueprint
+│   └── pages-model.R   # the model blueprint
+├── templates/
 │   ├── index.html
-│   ├── cars.html
-│   └── model.html
-├── partials/   # shared by every page
-│   ├── head.html
-│   ├── nav.html
-│   └── footer.html
-└── www/
+│   ├── partials/       # shared by every page
+│   │   ├── head.html
+│   │   ├── nav.html
+│   │   └── footer.html
+│   ├── cars/cars.html
+│   └── model/model.html
+└── static/
     ├── site.css
-    ├── cars.js
-    └── model.js
+    ├── cars/cars.js
+    └── model/model.js
 ```
 
 ```{embed, file = example_file("site", "app.R")}
 ```
 
+`templates`, `partials` and `static` say where the files are; the `/cars` and `/model`
+sections are blueprints, each with its own templates and static files:
+
+```{embed, file = example_file("site", "R", "pages-cars.R")}
+```
+
+`vignette("flask-flow", package = "spigot")` explains this layout.
+
 ### Several pages
 
 `pages` is a named list keyed by path. A request for `/cars/` is redirected to `/cars`, and
-a path that is neither a page nor a file in `www/` gets a 404 page. Pages can also be nested
+a path that is neither a page nor a static file gets a 404 page. Pages can also be nested
 (`"/docs/intro"`); see `?spigot_page` for how their relative URLs resolve.
 
 A top-level page can also be any Shiny UI, such as a `fluidPage()`, so a classic Shiny page
@@ -224,13 +236,16 @@ escaped, so data can never inject markup or R code, `{{#rows}} ... {{/rows}}` re
 each element of a list, and `{{> nav}}` inserts a partial. Here is the cars page, which R
 renders with all 32 rows:
 
-```{embed, file = example_file("site", "pages", "cars.html")}
+```{embed, file = example_file("site", "templates", "cars", "cars.html")}
 ```
 
-All three pages share the `head`, `nav` and `footer` partials. The nav marks the current
+Its script is `<script src="{{static}}/cars.js">`: a blueprint's pages get `{{static}}`, the
+path its static files are served at (`cars/static`).
+
+All three pages share the `head`, `nav` and `footer` partials from `templates/partials/`. The nav marks the current
 page with `aria-current`, using the `page` value each page's data sets:
 
-```{embed, file = example_file("site", "partials", "nav.html")}
+```{embed, file = example_file("site", "templates", "partials", "nav.html")}
 ```
 
 `data` can also be a function of the request, called for each request (for example, to read
@@ -243,7 +258,7 @@ The cars page arrives with every row already in the HTML. Its filter form then a
 for the matching rows and redraws the table body, building elements with `textContent`
 rather than HTML strings:
 
-```{embed, file = example_file("site", "www", "cars.js")}
+```{embed, file = example_file("site", "static", "cars", "cars.js")}
 ```
 
 ### Slow work: `future_promise()`

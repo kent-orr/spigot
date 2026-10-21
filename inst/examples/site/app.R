@@ -1,7 +1,9 @@
 # spigot "site" example: a small multi-page site about R's mtcars data.
 #
-# * Three pages, each a whisker template in pages/, sharing the partials in
-#   partials/ (the <head>, the nav bar and the footer).
+# * Templates live in templates/, shared partials (the <head>, the nav bar and
+#   the footer) in templates/partials/, and files the pages load in static/.
+# * The /cars and /model sections are blueprints, defined in R/: each has its
+#   own templates and static files. Shiny loads R/ before this file.
 # * The /cars page is rendered in R with every row; its filter form then
 #   calls the API and redraws the table in the browser.
 # * The /model page calls an endpoint that bootstraps a regression in a
@@ -14,41 +16,16 @@ library(spigot)
 future::plan(future::multisession, workers = 2)
 shiny::onStop(function() future::plan(future::sequential))
 
-cars <- data.frame(model = rownames(datasets::mtcars), datasets::mtcars, row.names = NULL)
-predictors <- c(
-  wt = "Weight (1000 lbs)", hp = "Horsepower", disp = "Displacement (cu. in.)",
-  qsec = "Quarter-mile time (s)", drat = "Rear axle ratio"
-)
-
-# A page of the site: its template, the shared partials, and its data. `key`
-# tells the nav partial which link is the current page. The data never
-# changes, so each page is rendered once and cached.
-page <- function(file, key, title, data = list()) {
-  spigot_page(
-    file.path("pages", file),
-    data = c(list(title = title, page = stats::setNames(list(TRUE), key)), data),
-    partials = list(
-      head = "partials/head.html",
-      nav = "partials/nav.html",
-      footer = "partials/footer.html"
-    ),
-    cache = TRUE
-  )
-}
-
 spigot_app(
   pages = list(
     "/" = page("index.html", "home", "Home", list(
-      n = nrow(cars),
+      n = nrow(car_data),
       predictors = length(predictors)
-    )),
-    "/cars" = page("cars.html", "cars", "Cars", list(
-      rows = unname(whisker::rowSplit(cars[c("model", "mpg", "cyl", "hp", "wt")]))
-    )),
-    "/model" = page("model.html", "model", "Model", list(
-      predictors = Map(function(name, label) list(name = name, label = label),
-                       names(predictors), unname(predictors), USE.NAMES = FALSE)
     ))
   ),
-  api = "api.R"
+  blueprints = list("/cars" = cars, "/model" = model),
+  api = "api.R",
+  templates = "templates",
+  partials = "templates/partials",
+  static = "static"
 )
