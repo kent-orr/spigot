@@ -655,3 +655,36 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   mix dirs and strings only at the top level" is read as: an unnamed element, such as
   `list("dir")`, is an error, because a list holds partials, not directories.
 - `templates = "templates"` is not a default (PLAN M15 step 6).
+
+## 2026-10-21 — M16: blueprints
+
+- **`spigot_blueprint()` validates and records; nothing is read until `spigot_app()`
+  builds the app**, the M15 rule. That includes its plumber file: PLAN M16 had `api` parsed
+  into a router at creation. Read at build instead, so the file is relative to the app's
+  `root` like the blueprint's `templates`, `partials` and `static`. The file is evaluated
+  in the environment `spigot_blueprint()` was called from (captured at creation), so in an
+  app directory it sees the functions in `R/`. Checked in `test-blueprint.R`.
+- **The app's own `api` file is now relative to `root` too.** With `root = "."` that is
+  the working directory at `spigot_app()`, exactly as in 0.1.1.
+- **Mounting mutates the app's router.** `plumber::pr_mount()` adds each blueprint API to
+  the app's `Plumber` object in place. A router passed as `api` therefore gains the mounts.
+  Mounts are keyed by path, so building two apps from one router does not stack them.
+  Accepted rather than cloning an R6 router.
+- **Resolution per blueprint:** `register_blueprints()` records `page$blueprint` on each
+  blueprint `spigot_page()`, and `spigot_app()` resolves it with
+  `template_loader(c(bp$templates, templates), root)` and
+  `merge_partials(app partials, blueprint partials)`, so a page's own partials beat the
+  blueprint's, which beat the app's.
+- **`{{static}}`** is added by wrapping `data`: a list gets `static` unless it has one; a
+  function's result gets it the same way at each request. It is added only when the
+  blueprint has `static`. A non-list result is left for the render-time "must return a
+  list" error.
+- **Blueprint `static` is one directory**, served at `<prefix>/static` through M14's
+  `set_static_paths()`; a multi-segment prefix works with httpuv (checked live:
+  `/cars/static/cars.js`). Every static path, the app's and the blueprints', is checked
+  against every page.
+- `check_pages_vs_prefix()` gains `noun`, so a blueprint under the API prefix says
+  "The blueprint ...". PLAN M16 step 5's browser test (`spigot.get("cars/fit")`) lives in
+  `test-blueprint.R` with the blueprint fixture rather than in `test-client.R`.
+- `/shared` is one of Shiny's reserved prefixes, so the fixture's shadowing page is
+  `/common`.

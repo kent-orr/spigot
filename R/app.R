@@ -49,6 +49,14 @@
 #' status `413` with the **plain-text** body `Maximum upload size exceeded`,
 #' not JSON. Clients should not assume every error body is JSON.
 #'
+#' @section Blueprints:
+#' `blueprints` is a list of [spigot_blueprint()]s named by prefix, such as
+#' `list("/cars" = cars)`. Each blueprint's pages are served under its
+#' prefix, its API under the app's `prefix` (`/api/cars/...`), and its static
+#' directory at `<prefix>/static`. Its pages are checked like the app's own:
+#' a path served twice, a page under the API prefix or a static path, and a
+#' missing template are errors when the app is built.
+#'
 #' @section Files:
 #' Files that pages load (scripts, stylesheets, images) can come from two
 #' places. `www/` is Shiny's: its files are served at the top level
@@ -86,9 +94,10 @@
 #' @param pages One page, served at `/`, or a named list of pages keyed by
 #'   path. See the Pages section.
 #' @param server Optional Shiny server function.
-#' @param api A plumber router or the path to a plumber file. A file is read
-#'   with [spigot_api()]; a router is used as given, so build it from
-#'   `spigot_api()` to get [spigot_json()] responses.
+#' @param api A plumber router or the path to a plumber file, relative to
+#'   `root`. A file is read with [spigot_api()]; a router is used as given, so
+#'   build it from `spigot_api()` to get [spigot_json()] responses.
+#'   Blueprint APIs are mounted on it.
 #' @param prefix URL path the API is mounted under.
 #' @param require_session If `TRUE`, API requests must carry the token of a
 #'   live session of this app. If `FALSE`, requests without one still reach
@@ -97,6 +106,8 @@
 #'   `options(shiny.maxRequestSize)` while the app runs (it also limits
 #'   [shiny::fileInput()] uploads). `Inf` removes the limit. `NULL` leaves the
 #'   option as it is.
+#' @param blueprints `NULL`, or a list of [spigot_blueprint()]s named by the
+#'   prefix each is served under. See the Blueprints section.
 #' @param templates Where [spigot_page()] template files are looked up, in
 #'   order: directories, or files matched by their name. A name not found
 #'   there is a path relative to `root`. `NULL` looks only there.
@@ -107,9 +118,9 @@
 #' @param static Directories of files to serve as they are: one directory,
 #'   served at `/static`, or a named list of them, served at `/<name>` each.
 #'   `NULL` serves none. See the Files section.
-#' @param root The directory that relative `templates`, `partials` and
-#'   `static` paths, and template file names not on the search path, are
-#'   relative to. A relative `root` is relative to the working directory when
+#' @param root The directory that relative `api`, `templates`, `partials`
+#'   and `static` paths, and template file names not on the search path, are
+#'   relative to, for the app and its blueprints. A relative `root` is relative to the working directory when
 #'   `spigot_app()` is called.
 #' @return A `shiny.appobj`.
 #' @export
@@ -121,25 +132,34 @@
 #' }
 spigot_app <- function(pages, server = NULL, api, prefix = "/api",
                        require_session = TRUE, max_request_size = NULL,
-                       templates = NULL, partials = NULL, static = NULL, root = ".") {
+                       blueprints = NULL, templates = NULL, partials = NULL,
+                       static = NULL, root = ".") {
   prefix <- check_prefix(prefix)
-  pages <- as_pages(pages)
+  pages <- as_pages(register_blueprints(as_pages(pages), blueprints, prefix))
   check_pages_vs_prefix(names(pages), prefix)
   root <- resolve_root(root)
   loader <- template_loader(templates, root)
   partials <- app_partials(partials, root, loader)
+  contexts <- lapply(blueprints, blueprint_context, templates, partials, root)
   pages[] <- lapply(pages, function(page) {
-    if (inherits(page, "spigot_page")) resolve_page(page, loader, partials) else page
+    if (!inherits(page, "spigot_page")) return(page)
+    ctx <- if (is.null(page$blueprint)) {
+      list(loader = loader, partials = partials)
+    } else {
+      contexts[[page$blueprint]]
+    }
+    resolve_page(page, ctx$loader, ctx$partials)
   })
-  static <- check_static(static, root, prefix)
+  static <- c(check_static(static, root, prefix), blueprint_static(blueprints, root))
   for (path in names(static)) check_pages_vs_prefix(names(pages), path, "static path")
   guard <- request_guard(require_session)
   check_max_request_size(max_request_size)
 
   ui <- attach_spigot(page_router(pages), spigot_dependency(prefix))
   app <- shiny::shinyApp(ui = ui, server = wrap_server(server), uiPattern = ".*")
-  app <- mount_app(app, spigot_api(api, envir = parent.frame()), prefix = prefix,
-                   guard = guard, static = static)
+  pr <- spigot_api(api_path(api, root), envir = parent.frame())
+  pr <- mount_blueprint_apis(pr, blueprints, root)
+  app <- mount_app(app, pr, prefix = prefix, guard = guard, static = static)
   if (!is.null(max_request_size)) {
     app <- app_on_start(app, function() {
       old <- options(shiny.maxRequestSize = max_request_size)
@@ -150,11 +170,12 @@ spigot_app <- function(pages, server = NULL, api, prefix = "/api",
 }
 
 # The API and static paths are answered before the pages, so a page under
-# one would never be reached. `what` names the kind of path in the error.
-check_pages_vs_prefix <- function(paths, prefix, what = "API prefix") {
+# one would never be reached. `what` names the kind of path in the error, and
+# `noun` what `paths` are.
+check_pages_vs_prefix <- function(paths, prefix, what = "API prefix", noun = "page") {
   hidden <- paths[grepl(paste0("^", regex_escape(prefix), "(/|$)"), paths)]
   if (length(hidden)) {
-    stop("The page \"", hidden[1], "\" is under the ", what, " \"", prefix,
+    stop("The ", noun, " \"", hidden[1], "\" is under the ", what, " \"", prefix,
          "\", so it would never be served.", call. = FALSE)
   }
   invisible()

@@ -11,6 +11,7 @@ spigot_app(
   prefix = "/api",
   require_session = TRUE,
   max_request_size = NULL,
+  blueprints = NULL,
   templates = NULL,
   partials = NULL,
   static = NULL,
@@ -23,9 +24,10 @@ path. See the Pages section.}
 
 \item{server}{Optional Shiny server function.}
 
-\item{api}{A plumber router or the path to a plumber file. A file is read
-with \code{\link[=spigot_api]{spigot_api()}}; a router is used as given, so build it from
-\code{spigot_api()} to get \code{\link[=spigot_json]{spigot_json()}} responses.}
+\item{api}{A plumber router or the path to a plumber file, relative to
+\code{root}. A file is read with \code{\link[=spigot_api]{spigot_api()}}; a router is used as given, so
+build it from \code{spigot_api()} to get \code{\link[=spigot_json]{spigot_json()}} responses.
+Blueprint APIs are mounted on it.}
 
 \item{prefix}{URL path the API is mounted under.}
 
@@ -37,6 +39,9 @@ the endpoint, where \code{\link[=spigot_session]{spigot_session()}} returns \cod
 \code{options(shiny.maxRequestSize)} while the app runs (it also limits
 \code{\link[shiny:fileInput]{shiny::fileInput()}} uploads). \code{Inf} removes the limit. \code{NULL} leaves the
 option as it is.}
+
+\item{blueprints}{\code{NULL}, or a list of \code{\link[=spigot_blueprint]{spigot_blueprint()}}s named by the
+prefix each is served under. See the Blueprints section.}
 
 \item{templates}{Where \code{\link[=spigot_page]{spigot_page()}} template files are looked up, in
 order: directories, or files matched by their name. A name not found
@@ -51,9 +56,9 @@ page's own partials win over these.}
 served at \verb{/static}, or a named list of them, served at \verb{/<name>} each.
 \code{NULL} serves none. See the Files section.}
 
-\item{root}{The directory that relative \code{templates}, \code{partials} and
-\code{static} paths, and template file names not on the search path, are
-relative to. A relative \code{root} is relative to the working directory when
+\item{root}{The directory that relative \code{api}, \code{templates}, \code{partials}
+and \code{static} paths, and template file names not on the search path, are
+relative to, for the app and its blueprints. A relative \code{root} is relative to the working directory when
 \code{spigot_app()} is called.}
 }
 \value{
@@ -114,6 +119,16 @@ Shiny rejects request bodies larger than \code{getOption("shiny.maxRequestSize")
 (5 MB by default) before any R handler runs. That response is Shiny's own:
 status \code{413} with the \strong{plain-text} body \verb{Maximum upload size exceeded},
 not JSON. Clients should not assume every error body is JSON.
+}
+
+\section{Blueprints}{
+
+\code{blueprints} is a list of \code{\link[=spigot_blueprint]{spigot_blueprint()}}s named by prefix, such as
+\code{list("/cars" = cars)}. Each blueprint's pages are served under its
+prefix, its API under the app's \code{prefix} (\verb{/api/cars/...}), and its static
+directory at \verb{<prefix>/static}. Its pages are checked like the app's own:
+a path served twice, a page under the API prefix or a static path, and a
+missing template are errors when the app is built.
 }
 
 \section{Files}{

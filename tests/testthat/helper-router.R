@@ -25,8 +25,10 @@ fake_server <- function() {
 }
 
 # Run `app`'s onStart with `srv` as the running server, then the first
-# event-loop tick, as shiny::runApp() does.
+# event-loop tick, as shiny::runApp() does. Callbacks left by earlier tests
+# run first, so they cannot reach `srv`.
 start_with_server <- function(app, srv) {
+  later::run_now()
   old <- shiny::getShinyOption("server", default = NULL)
   shiny::shinyOptions(server = srv)
   withr::defer(shiny::shinyOptions(server = old))
