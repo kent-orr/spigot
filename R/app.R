@@ -48,6 +48,21 @@
 #' status `413` with the **plain-text** body `Maximum upload size exceeded`,
 #' not JSON. Clients should not assume every error body is JSON.
 #'
+#' @section Running the app:
+#' Run an app directory: `shiny::runApp("myapp")` or `runApp("myapp/app.R")`,
+#' as RStudio's Run App button, Shiny Server and Posit Connect do. Shiny loads
+#' the files in `R/`, then sources `app.R` with the directory as the working
+#' directory, serves `www/`, and keeps that working directory while the app
+#' runs.
+#'
+#' Printing the object `spigot_app()` returns also runs the app (at the
+#' console, when `app.R` is sourced with echo, or with `Rscript app.R`), but
+#' Shiny then does none of that. Template and plumber file paths are relative
+#' to whatever the working directory is, `www/` files get the `404` HTML page
+#' (so a browser refuses to run a `www/` script), and endpoints can't call
+#' functions from `R/`. From a terminal, use
+#' `Rscript -e 'shiny::runApp("myapp")'`.
+#'
 #' @param pages One page, served at `/`, or a named list of pages keyed by
 #'   path. See the Pages section.
 #' @param server Optional Shiny server function.

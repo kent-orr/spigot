@@ -36,8 +36,9 @@ either in the template itself or in a partial. Shiny's scripts go just
 before it. A string containing \code{<}, \verb{\{\{} or a line break is the template
 text; any other string is the path of a file holding it, read as UTF-8
 when \code{spigot_page()} is called. A relative path is relative to the working
-directory then, which is the app's directory when the app is run with
-\code{\link[shiny:runApp]{shiny::runApp()}}. \code{partials} follow the same rule.
+directory then, which is the app's directory when the app directory is run
+with \code{\link[shiny:runApp]{shiny::runApp()}} (see "Running the app" in \code{\link[=spigot_app]{spigot_app()}}).
+\code{partials} follow the same rule.
 
 The template sees only \code{data}, never R variables. \code{{{name}}} inserts a
 value with HTML escaped and \code{{{{name}}}} inserts it as raw HTML; neither

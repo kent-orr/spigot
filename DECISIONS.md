@@ -553,3 +553,25 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   seen by the creation-time scan. Such an unknown partial now gets whisker's default: a
   `name.mustache` file in the working directory if there is one, else a warning and empty
   output. Accepted: the construction check catches every ordinary case.
+
+## 2026-10-21 — Launch modes: `www/` and `R/` are Shiny's, and only for an app directory
+
+- **Found by** a user writing an app from scratch: sourcing `app.R` and running the object
+  it returned (an editor's Source button) gave Firefox "blocked due to MIME type
+  (text/html)" for `www/app.js`. The script got spigot's HTML 404 page.
+- **Cause** (checked, shiny 1.14.0): `runApp("<dir>")`, `runApp("<dir>/app.R")` and
+  `shinyAppDir()` all go through `shiny:::shinyAppDir_appR`, which loads `R/` into a
+  shared environment, sources `app.R` with `setwd(appDir)`, registers `www/` as an httpuv
+  static path at `/`, and sets the working directory to `appDir` in its `onStart`. Running
+  the `shiny.appobj` itself (`print.shiny.appobj()` is `runApp(x)`, which is also what the
+  console, `source(echo = TRUE)` and `Rscript app.R` do) does none of these.
+- **Decision:** no change to spigot. The behaviour is pinned in `test-launch.R` (fixture
+  `apps/launch/`) and documented in `?spigot_app` ("Running the app") and the
+  getting-started vignette, which point to `runApp("<dir>")`.
+- **Considered:** `shinyAppDir_appR` builds its own `staticPaths` and ignores the inner
+  app's, so `spigot_app()` could set `app$staticPaths` to serve `www/` in object mode
+  without changing directory mode. Not done: the folder would be resolved against the
+  working directory when `spigot_app()` is called, which is the guess that failed here, and
+  `R/` still would not be loaded, so the app would break one request later. If this
+  keeps coming up, the better fix is probably a message when the app starts in object
+  mode while a `www/` folder sits in the working directory.

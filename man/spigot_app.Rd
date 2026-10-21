@@ -93,6 +93,23 @@ status \code{413} with the \strong{plain-text} body \verb{Maximum upload size ex
 not JSON. Clients should not assume every error body is JSON.
 }
 
+\section{Running the app}{
+
+Run an app directory: \code{shiny::runApp("myapp")} or \code{runApp("myapp/app.R")},
+as RStudio's Run App button, Shiny Server and Posit Connect do. Shiny loads
+the files in \verb{R/}, then sources \code{app.R} with the directory as the working
+directory, serves \verb{www/}, and keeps that working directory while the app
+runs.
+
+Printing the object \code{spigot_app()} returns also runs the app (at the
+console, when \code{app.R} is sourced with echo, or with \verb{Rscript app.R}), but
+Shiny then does none of that. Template and plumber file paths are relative
+to whatever the working directory is, \verb{www/} files get the \code{404} HTML page
+(so a browser refuses to run a \verb{www/} script), and endpoints can't call
+functions from \verb{R/}. From a terminal, use
+\verb{Rscript -e 'shiny::runApp("myapp")'}.
+}
+
 \examples{
 \dontrun{
 api <- spigot_api() |> plumber::pr_get("/hello", function() list(msg = "hi"))

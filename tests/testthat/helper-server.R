@@ -1,6 +1,8 @@
 # start_app(): run a Shiny app in a background R process on a random port and
-# wait until it answers. `app` is an app directory or a self-contained
-# function returning a shiny.appobj (it is serialised to the child process).
+# wait until it answers. `app` is anything shiny::runApp() takes (an app
+# directory or an app.R file) or a self-contained function returning a
+# shiny.appobj (it is serialised to the child process). `wd` is the child's
+# working directory before `app` is resolved; NULL keeps the current one.
 
 spigot_load_spec <- function() {
   path <- getNamespaceInfo("spigot", "path")
@@ -9,13 +11,14 @@ spigot_load_spec <- function() {
   list(dev = dev, path = path)
 }
 
-start_app <- function(app, timeout = 20, env = parent.frame()) {
+start_app <- function(app, timeout = 20, env = parent.frame(), wd = NULL) {
   testthat::skip_if_not_installed("callr")
   testthat::skip_if_not_installed("httr2")
   port <- httpuv::randomPort()
   if (is.character(app)) app <- normalizePath(app, mustWork = TRUE)
   proc <- callr::r_bg(
-    function(app, port, load) {
+    function(app, port, load, wd) {
+      if (!is.null(wd)) setwd(wd)
       if (load$dev) {
         pkgload::load_all(load$path, quiet = TRUE, export_all = FALSE, helpers = FALSE)
       } else {
@@ -24,7 +27,7 @@ start_app <- function(app, timeout = 20, env = parent.frame()) {
       if (is.function(app)) app <- app()
       shiny::runApp(app, port = port, launch.browser = FALSE)
     },
-    args = list(app = app, port = port, load = spigot_load_spec()),
+    args = list(app = app, port = port, load = spigot_load_spec(), wd = wd),
     stdout = "|", stderr = "2>&1"
   )
   withr::defer(proc$kill(), envir = env)
