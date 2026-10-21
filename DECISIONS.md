@@ -575,3 +575,28 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   `R/` still would not be loaded, so the app would break one request later. If this
   keeps coming up, the better fix is probably a message when the app starts in object
   mode while a `www/` folder sits in the working directory.
+
+## 2026-10-21 — M11: spigot.js is ES2017 (supersedes the M3 ES5 note)
+
+- **Baseline ES2017**, still no build step. The file already required `fetch`, `URL`,
+  `AbortController` and `ReadableStream`, and every browser with those has `class`, arrow
+  functions, `const`/`let`, template literals and `async`/`await`. The ES5 rule bought no
+  browser and cost a hand-built promise in `request()`, an `Object.create(Error.prototype)`
+  constructor, a `withOption()` copy loop and `typeof` guards in `isRawBody()`.
+  `SpigotError` is now `class SpigotError extends Error`, so `instanceof Error` still holds.
+- **ES2017, not ES2018:** PLAN M11 step 6 wrote `{ ...options, query }`, but object spread
+  is ES2018 (EdgeHTML had `AbortController` and `async` but not object spread). The
+  shorthand is `Object.assign({}, options, { query })`. Checked by parsing the file with
+  acorn at `ecmaVersion: 2017` (passes) and `2016` (fails on `async`).
+- **`ReadableStream` is now required.** Dropping the `typeof` guards means `body instanceof
+  ReadableStream` throws where it is undefined: Firefox 57-64 had `AbortController` but not
+  `ReadableStream`. Accepted (those versions are from 2017-2018); the header comment lists
+  it with the other required APIs.
+- **Still a classic script in an IIFE.** A module is deferred and sees
+  `document.currentScript === null`, which breaks the `data-prefix` read and the guarantee
+  that `shiny.js` runs first. The IIFE keeps spigot's names private: a top-level `const` in
+  a classic script is a global lexical binding shared with the page's own scripts, and the
+  examples declare `const $`.
+- `request()` is an `async function`: `Promise.race()` of the timeout and the call, with
+  `clearTimeout()` in `finally`. A call that times out while still waiting for
+  `spigot.ready` never fetches (it checks `signal.aborted` after the wait), as before.
