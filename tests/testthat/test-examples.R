@@ -198,6 +198,29 @@ test_that("the live example pushes the count to every tab and updates the caller
   expect_match(wait_for_text(a, text("tabs"), "^1$"), "^1$")
 })
 
+test_that("the live example's tab count survives a state reply that arrives late", {
+  skip_if_no_chrome()
+  srv <- start_app(example_dir("live"))
+  # Hold tab a's reply to `state` (sent with one tab open) until after tab b
+  # has opened and the push of the new count has reached a.
+  hold <- '(() => {
+    const f = window.fetch;
+    window.fetch = (url, init) => {
+      const p = f(url, init);
+      if (!/\\/api\\/state$/.test(String(url))) return p;
+      return p.then((r) => new Promise((ok) => setTimeout(() => {
+        window.stateLanded = true; ok(r); }, 3000)));
+    };
+  })();'
+  a <- new_tab(srv$url, init = hold)
+  b <- new_tab(srv$url)
+  text <- 'document.getElementById("tabs").textContent'
+  expect_match(wait_for_text(a, text, "^2$"), "^2$")
+  expect_match(wait_for_text(a, "String(window.stateLanded === true)", "^true$"), "^true$")
+  Sys.sleep(0.5) # let the page handle the reply
+  expect_identical(js(a, text), "2")
+})
+
 test_that("the site example filters cars and fits a model from the browser", {
   skip_if_no_chrome()
   skip_if_not_installed("future")

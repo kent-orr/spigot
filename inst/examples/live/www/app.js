@@ -24,7 +24,13 @@ spigot.on("count", (msg) => {
   showCount(msg.count);
   log(`push  count: ${msg.count} (+${msg.by})`);
 });
+
+// The number of tabs goes down as well as up, so "highest seen" does not work
+// for it. Once one push has arrived, every later change arrives as a push too,
+// and a reply that lands after it may be older, so the reply is ignored.
+let tabsPushed = false;
 spigot.on("tabs", (msg) => {
+  tabsPushed = true;
   $("tabs").textContent = msg.tabs;
   log(`push  tabs: ${msg.tabs}`);
 });
@@ -32,7 +38,7 @@ spigot.on("tabs", (msg) => {
 // HTTP: read the current state once. spigot.get() waits for the Shiny session.
 spigot.get("state").then((s) => {
   showCount(s.count);
-  $("tabs").textContent = s.tabs;
+  if (!tabsPushed) $("tabs").textContent = s.tabs;
 });
 
 async function add(by) {

@@ -53,10 +53,15 @@ js <- function(tab, expr, timeout = 10) {
 }
 
 # Open `url` in a new tab and wait until the Shiny session has its token.
-# The tab is closed when the calling test finishes.
-new_tab <- function(url, timeout = 10, env = parent.frame()) {
+# `init` is JS run in the page before any of its own scripts. The tab is
+# closed when the calling test finishes.
+new_tab <- function(url, timeout = 10, env = parent.frame(), init = NULL) {
   tab <- chromote::ChromoteSession$new()
   withr::defer(try(tab$close(), silent = TRUE), envir = env)
+  if (!is.null(init)) {
+    tab$Page$enable() # without it, the script is not run on the next document
+    tab$Page$addScriptToEvaluateOnNewDocument(init)
+  }
   tab$Page$navigate(url)
   ready <- "!!(window.Shiny && Shiny.shinyapp && Shiny.shinyapp.config && Shiny.shinyapp.config.sessionId)"
   deadline <- Sys.time() + timeout
