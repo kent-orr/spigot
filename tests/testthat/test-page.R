@@ -455,6 +455,17 @@ test_that("nested pages load Shiny, reach the API and resolve URLs from the app 
   }
 })
 
+test_that("a nested page loads static/ files through its <base>", {
+  skip_if_no_chrome()
+  srv <- start_app(test_path("apps", "page"))
+  for (path in c("/docs/intro", "/docs/a/b")) {
+    tab <- new_tab(paste0(srv$url, path))
+    # static/a.js sets window.staticLoaded to the page title once it has run.
+    expect_identical(js(tab, "window.staticLoaded"), js(tab, "document.title"), info = path)
+    tab$close()
+  }
+})
+
 test_that("#fragment links on a nested page stay on the page", {
   skip_if_no_chrome()
   srv <- start_app(test_path("apps", "page"))

@@ -10,7 +10,9 @@ spigot_app(
   api,
   prefix = "/api",
   require_session = TRUE,
-  max_request_size = NULL
+  max_request_size = NULL,
+  static = NULL,
+  root = "."
 )
 }
 \arguments{
@@ -33,14 +35,23 @@ the endpoint, where \code{\link[=spigot_session]{spigot_session()}} returns \cod
 \code{options(shiny.maxRequestSize)} while the app runs (it also limits
 \code{\link[shiny:fileInput]{shiny::fileInput()}} uploads). \code{Inf} removes the limit. \code{NULL} leaves the
 option as it is.}
+
+\item{static}{Directories of files to serve as they are: one directory,
+served at \verb{/static}, or a named list of them, served at \verb{/<name>} each.
+\code{NULL} serves none. See the Files section.}
+
+\item{root}{The directory that relative \code{static} paths are relative to.
+A relative \code{root} is relative to the working directory when
+\code{spigot_app()} is called.}
 }
 \value{
 A \code{shiny.appobj}.
 }
 \description{
 The API is served by the same process, origin and port as the app, under
-\code{prefix}. The \code{pages} are served at their paths, and every other path is
-handled by Shiny as usual (\verb{www/} files, for an app directory).
+\code{prefix}. The \code{pages} are served at their paths, \code{static} directories at
+theirs, and every other path is handled by Shiny as usual (\verb{www/} files,
+for an app directory).
 }
 \section{Pages}{
 
@@ -93,6 +104,26 @@ status \code{413} with the \strong{plain-text} body \verb{Maximum upload size ex
 not JSON. Clients should not assume every error body is JSON.
 }
 
+\section{Files}{
+
+Files that pages load (scripts, stylesheets, images) can come from two
+places. \verb{www/} is Shiny's: its files are served at the top level
+(\code{www/app.js} at \verb{/app.js}), and only when the app directory is run (see
+"Running the app").
+
+\code{static} is spigot's, and is served however the app is run. It is one
+directory, served at \verb{/static}, or a named list of directories served at
+\verb{/<name>} each, such as \code{list(js = "js", img = "assets/img")}. A relative
+directory is relative to \code{root}, and a relative \code{root} to the working
+directory when \code{spigot_app()} is called. Files are served by httpuv
+without running R. A name must be one URL segment, other than \code{session},
+\code{shared} and the first segment of \code{prefix}, and no page may be at or
+under a static path.
+
+Pages below the top level get a \verb{<base href>} to the app's root, so
+\verb{<script src="static/app.js">} loads the same file from every page.
+}
+
 \section{Running the app}{
 
 Run an app directory: \code{shiny::runApp("myapp")} or \code{runApp("myapp/app.R")},
@@ -106,7 +137,8 @@ console, when \code{app.R} is sourced with echo, or with \verb{Rscript app.R}), 
 Shiny then does none of that. Template and plumber file paths are relative
 to whatever the working directory is, \verb{www/} files get the \code{404} HTML page
 (so a browser refuses to run a \verb{www/} script), and endpoints can't call
-functions from \verb{R/}. From a terminal, use
+functions from \verb{R/}. \code{static} directories are still served. From a
+terminal, use
 \verb{Rscript -e 'shiny::runApp("myapp")'}.
 }
 

@@ -1,7 +1,8 @@
 # How a spigot app behaves under each way of launching it. The fixture
 # apps/launch/ uses everything a launch mode can leave out: a template file
 # (index.html), a plumber file (api.R), a www/ file (app.js) and a helper in
-# R/ (shout(), which api.R calls).
+# R/ (shout(), which api.R calls). It also has spigot's static/ (extra.js),
+# which both modes serve.
 #
 # Directory mode is shiny::runApp("<dir>") or runApp("<dir>/app.R"), and what
 # RStudio's Run App button, Shiny Server, Posit Connect and run_example() do.
@@ -13,6 +14,14 @@
 # Shiny then does none of the above.
 
 launch_dir <- function() normalizePath(test_path("apps", "launch"))
+
+# static/ is served by spigot in either mode, with a JavaScript content type.
+expect_static_served <- function(srv) {
+  r <- hit(paste0(srv$url, "/static/extra.js"))
+  expect_identical(httr2::resp_status(r), 200L)
+  expect_match(httr2::resp_content_type(r), "javascript")
+  expect_match(hit_text(r), "launchExtra", fixed = TRUE)
+}
 
 # The checks every directory-mode launch must pass.
 expect_directory_mode <- function(srv, dir) {
@@ -32,6 +41,8 @@ expect_directory_mode <- function(srv, dir) {
 
   r <- hit(paste0(srv$url, "/api/wd"))
   expect_identical(httr2::resp_body_json(r)$wd, dir)
+
+  expect_static_served(srv)
 }
 
 test_that("runApp(<dir>) serves the page, www/ files and R/ helpers", {
@@ -70,6 +81,9 @@ test_that("the object app.R returns serves its page and API, but not www/ or R/"
   expect_identical(httr2::resp_status(r), 200L)
   expect_match(hit_text(r), "<title>launch fixture</title>", fixed = TRUE)
   expect_identical(httr2::resp_body_json(hit(paste0(srv$url, "/api/wd")))$wd, dir)
+
+  # static/ is spigot's, so it is served here too.
+  expect_static_served(srv)
 
   # www/ is not served: app.js gets spigot's HTML 404, which a browser
   # refuses to run as a script ("blocked due to MIME type").

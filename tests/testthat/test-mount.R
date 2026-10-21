@@ -168,22 +168,25 @@ test_that("mount_app() falls back to the original handler, not to itself", {
   expect_match(resp_text(r), "hello")
 })
 
-fake_server <- function() {
-  calls <- list()
-  list(
-    setStaticPath = function(..., .list = NULL) calls[[length(calls) + 1L]] <<- .list,
-    calls = function() calls
-  )
-}
-
-test_that("exclude_static_prefix() excludes the prefix from httpuv static serving", {
+test_that("set_static_paths() excludes the prefix from httpuv static serving", {
   srv <- fake_server()
-  expect_true(exclude_static_prefix(srv, "/v1/api"))
+  expect_true(set_static_paths(srv, "/v1/api"))
   calls <- srv$calls()
   expect_length(calls, 1)
   expect_identical(names(calls[[1]]), "/v1/api")
   expect_identical(calls[[1]][[1]], httpuv::excludeStaticPath())
-  expect_false(exclude_static_prefix(NULL, "/api"))
+  expect_false(set_static_paths(NULL, "/api"))
+})
+
+test_that("set_static_paths() adds the static dirs in the same call", {
+  srv <- fake_server()
+  dir <- normalizePath(withr::local_tempdir())
+  expect_true(set_static_paths(srv, "/api", list("/static" = dir)))
+  calls <- srv$calls()
+  expect_length(calls, 1)
+  expect_identical(names(calls[[1]]), c("/static", "/api"))
+  expect_identical(calls[[1]][["/static"]], httpuv::staticPath(dir))
+  expect_identical(calls[[1]][["/api"]], httpuv::excludeStaticPath())
 })
 
 test_that("mount_app() keeps the app's onStart and then excludes the prefix", {

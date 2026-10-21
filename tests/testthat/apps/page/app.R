@@ -27,5 +27,6 @@ spigot::spigot_app(
       data = list(t = format(Sys.time(), "%OS6")), cache = TRUE
     )
   ),
-  api = api
+  api = api,
+  static = "static"
 )

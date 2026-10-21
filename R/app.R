@@ -1,8 +1,9 @@
 #' Create a Shiny app with a plumber API mounted inside it
 #'
 #' The API is served by the same process, origin and port as the app, under
-#' `prefix`. The `pages` are served at their paths, and every other path is
-#' handled by Shiny as usual (`www/` files, for an app directory).
+#' `prefix`. The `pages` are served at their paths, `static` directories at
+#' theirs, and every other path is handled by Shiny as usual (`www/` files,
+#' for an app directory).
 #'
 #' @section Pages:
 #' `pages` is one page, served at `/`, or a named list of them, such as
@@ -48,6 +49,24 @@
 #' status `413` with the **plain-text** body `Maximum upload size exceeded`,
 #' not JSON. Clients should not assume every error body is JSON.
 #'
+#' @section Files:
+#' Files that pages load (scripts, stylesheets, images) can come from two
+#' places. `www/` is Shiny's: its files are served at the top level
+#' (`www/app.js` at `/app.js`), and only when the app directory is run (see
+#' "Running the app").
+#'
+#' `static` is spigot's, and is served however the app is run. It is one
+#' directory, served at `/static`, or a named list of directories served at
+#' `/<name>` each, such as `list(js = "js", img = "assets/img")`. A relative
+#' directory is relative to `root`, and a relative `root` to the working
+#' directory when `spigot_app()` is called. Files are served by httpuv
+#' without running R. A name must be one URL segment, other than `session`,
+#' `shared` and the first segment of `prefix`, and no page may be at or
+#' under a static path.
+#'
+#' Pages below the top level get a `<base href>` to the app's root, so
+#' `<script src="static/app.js">` loads the same file from every page.
+#'
 #' @section Running the app:
 #' Run an app directory: `shiny::runApp("myapp")` or `runApp("myapp/app.R")`,
 #' as RStudio's Run App button, Shiny Server and Posit Connect do. Shiny loads
@@ -60,7 +79,8 @@
 #' Shiny then does none of that. Template and plumber file paths are relative
 #' to whatever the working directory is, `www/` files get the `404` HTML page
 #' (so a browser refuses to run a `www/` script), and endpoints can't call
-#' functions from `R/`. From a terminal, use
+#' functions from `R/`. `static` directories are still served. From a
+#' terminal, use
 #' `Rscript -e 'shiny::runApp("myapp")'`.
 #'
 #' @param pages One page, served at `/`, or a named list of pages keyed by
@@ -77,6 +97,12 @@
 #'   `options(shiny.maxRequestSize)` while the app runs (it also limits
 #'   [shiny::fileInput()] uploads). `Inf` removes the limit. `NULL` leaves the
 #'   option as it is.
+#' @param static Directories of files to serve as they are: one directory,
+#'   served at `/static`, or a named list of them, served at `/<name>` each.
+#'   `NULL` serves none. See the Files section.
+#' @param root The directory that relative `static` paths are relative to.
+#'   A relative `root` is relative to the working directory when
+#'   `spigot_app()` is called.
 #' @return A `shiny.appobj`.
 #' @export
 #' @examples
@@ -86,17 +112,21 @@
 #' shiny::runApp(spigot_app(pages = home, api = api))
 #' }
 spigot_app <- function(pages, server = NULL, api, prefix = "/api",
-                       require_session = TRUE, max_request_size = NULL) {
+                       require_session = TRUE, max_request_size = NULL,
+                       static = NULL, root = ".") {
   prefix <- check_prefix(prefix)
   pages <- as_pages(pages)
   check_pages_vs_prefix(names(pages), prefix)
+  root <- resolve_root(root)
+  static <- check_static(static, root, prefix)
+  for (path in names(static)) check_pages_vs_prefix(names(pages), path, "static path")
   guard <- request_guard(require_session)
   check_max_request_size(max_request_size)
 
   ui <- attach_spigot(page_router(pages), spigot_dependency(prefix))
   app <- shiny::shinyApp(ui = ui, server = wrap_server(server), uiPattern = ".*")
   app <- mount_app(app, spigot_api(api, envir = parent.frame()), prefix = prefix,
-                   guard = guard)
+                   guard = guard, static = static)
   if (!is.null(max_request_size)) {
     app <- app_on_start(app, function() {
       old <- options(shiny.maxRequestSize = max_request_size)
@@ -106,12 +136,12 @@ spigot_app <- function(pages, server = NULL, api, prefix = "/api",
   app
 }
 
-# The API is mounted in front of the pages, so a page under the prefix would
-# never be reached.
-check_pages_vs_prefix <- function(paths, prefix) {
+# The API and static paths are answered before the pages, so a page under
+# one would never be reached. `what` names the kind of path in the error.
+check_pages_vs_prefix <- function(paths, prefix, what = "API prefix") {
   hidden <- paths[grepl(paste0("^", regex_escape(prefix), "(/|$)"), paths)]
   if (length(hidden)) {
-    stop("The page \"", hidden[1], "\" is under the API prefix \"", prefix,
+    stop("The page \"", hidden[1], "\" is under the ", what, " \"", prefix,
          "\", so it would never be served.", call. = FALSE)
   }
   invisible()

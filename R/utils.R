@@ -7,6 +7,9 @@ is_string <- function(x) is.character(x) && length(x) == 1 && !is.na(x)
 
 is_flag <- function(x) is.logical(x) && length(x) == 1 && !is.na(x)
 
+# An absolute file path: /x, ~/x, C:/x, C:\x or \\server\x.
+is_absolute <- function(path) grepl("^(/|~|[A-Za-z]:[/\\\\]|\\\\\\\\)", path)
+
 # Call `f` the way Shiny calls a ui function: with the request if it takes
 # an argument, else with none.
 call_with_req <- function(f, req) if (length(formals(f))) f(req) else f()

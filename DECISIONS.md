@@ -600,3 +600,26 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
 - `request()` is an `async function`: `Promise.race()` of the timeout and the call, with
   `clearTimeout()` in `finally`. A call that times out while still waiting for
   `spigot.ready` never fetches (it checks `signal.aborted` after the wait), as before.
+
+## 2026-10-21 — M14: `static` and `root`
+
+- **`static` dirs are httpuv static paths**, set in `mount_app()`'s existing on-start
+  `later::later()` call, next to the API prefix exclusion (`set_static_paths()`, formerly
+  `exclude_static_prefix()`). PLAN M14 step 5 also set `app$staticPaths` for object mode.
+  Not needed: `runApp()` calls the app's `onStart` in both launch modes, and the server
+  exists by the first event-loop tick in both. Checked: `test-launch.R` serves
+  `/static/extra.js` in object mode with only the on-start path. One mechanism, so the two
+  modes cannot drift.
+- **`root` and the dirs are resolved when `spigot_app()` is called**, to normalized
+  absolute paths. In directory mode that is inside Shiny's `setwd(appDir)`, so `root = "."`
+  is the app directory; in object mode it is the working directory at the call, as for
+  template files. An absolute static dir is used as given.
+- **Overlap with the API prefix:** PLAN said a static prefix "equal to or under" the API
+  prefix is an error. A static name is one segment, so it can only be equal; the check is
+  that the name is not the prefix's first segment, which also refuses `/api` when the
+  prefix is `/api/v1` (httpuv would serve `/api/...` files around the API).
+- **Added, not in the plan:** a page at or under a static path is an error, with
+  `check_pages_vs_prefix()`'s message ("so it would never be served"): httpuv answers
+  those paths before R. `spigot_app()` checks pages before `root` and `static`, so an app
+  sourced from the wrong directory still reports the missing template first.
+- `static = NULL` (the default) sets exactly the paths 0.1.1 set: only the exclusion.

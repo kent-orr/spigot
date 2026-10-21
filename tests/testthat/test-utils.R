@@ -15,3 +15,8 @@ test_that("is_flag() accepts one non-NA logical", {
     expect_false(is_flag(bad))
   }
 })
+
+test_that("is_absolute() tells absolute paths from relative ones", {
+  for (p in c("/a", "~/a", "~", "C:/a", "c:\\a", "\\\\server\\a")) expect_true(is_absolute(p), info = p)
+  for (p in c("a", "./a", "../a", "a/b", "C:a", "")) expect_false(is_absolute(p), info = p)
+})

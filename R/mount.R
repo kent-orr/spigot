@@ -57,9 +57,9 @@ mount_failure <- function(e) {
   json_error(500L, "internal server error")
 }
 
-# Put the API in front of the app's own HTTP handler, and keep httpuv's static
-# file serving away from the prefix.
-mount_app <- function(app, pr, prefix = "/api", guard = NULL) {
+# Put the API in front of the app's own HTTP handler, keep httpuv's static
+# file serving away from the prefix, and serve `static` (from check_static()).
+mount_app <- function(app, pr, prefix = "/api", guard = NULL, static = list()) {
   # spigot_mount_handler() forces `fallback`, so this captures the original
   # handler before the field is replaced (otherwise it would call itself).
   app$httpHandler <- spigot_mount_handler(pr, prefix, fallback = app$httpHandler,
@@ -67,11 +67,12 @@ mount_app <- function(app, pr, prefix = "/api", guard = NULL) {
 
   # An app directory with www/ makes httpuv serve "/" as a static path. httpuv
   # answers non-GET requests under it with 400 itself, before R sees them. The
-  # httpuv server only exists after onStart, so exclude the prefix on the first
-  # event-loop tick, which runs before any request is handled in R.
+  # httpuv server only exists after onStart, so set the paths on the first
+  # event-loop tick, which runs before any request is handled in R. onStart
+  # runs in both launch modes, so this is the one place static dirs are set.
   app_on_start(app, function() {
     later::later(function() {
-      exclude_static_prefix(shiny::getShinyOption("server", default = NULL), prefix)
+      set_static_paths(shiny::getShinyOption("server", default = NULL), prefix, static)
     })
   })
 }
@@ -89,9 +90,9 @@ app_on_start <- function(app, fn) {
 
 # `server` is the running httpuv WebServer (the object shiny::addResourcePath()
 # also updates), or NULL when the app is not run by shiny::runApp().
-exclude_static_prefix <- function(server, prefix) {
+set_static_paths <- function(server, prefix, static = list()) {
   if (is.null(server)) return(FALSE)
-  server$setStaticPath(.list = stats::setNames(list(httpuv::excludeStaticPath()), prefix))
+  server$setStaticPath(.list = httpuv_static_paths(static, prefix))
   TRUE
 }
 

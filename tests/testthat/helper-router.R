@@ -14,3 +14,23 @@ test_router <- function() {
     plumber::pr_get("/async", function() promises::promise_resolve(list(a = 1))) |>
     plumber::pr_get("/path", function(req) list(script = req$SCRIPT_NAME, path = req$PATH_INFO))
 }
+
+# Stands in for the running httpuv server: records each setStaticPath() list.
+fake_server <- function() {
+  calls <- list()
+  list(
+    setStaticPath = function(..., .list = NULL) calls[[length(calls) + 1L]] <<- .list,
+    calls = function() calls
+  )
+}
+
+# Run `app`'s onStart with `srv` as the running server, then the first
+# event-loop tick, as shiny::runApp() does.
+start_with_server <- function(app, srv) {
+  old <- shiny::getShinyOption("server", default = NULL)
+  shiny::shinyOptions(server = srv)
+  withr::defer(shiny::shinyOptions(server = old))
+  app$onStart()
+  later::run_now()
+  invisible(srv)
+}
