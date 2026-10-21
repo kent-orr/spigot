@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -196,7 +196,8 @@ event. Pushing across processes needs an outside relay, such as Redis or
 Postgres <code>LISTEN/NOTIFY</code>, and spigot does not provide
 one.</li>
 <li>
-<strong>Push from the app’s process.</strong> A <code>future</code>
+<strong>Push from the app’s process</strong>: an endpoint, an
+observer, a <code><a href="https://later.r-lib.org/reference/later.html" class="external-link">later::later()</a></code> callback. A <code>future</code>
 worker is another R process and has no sessions. Emit from the promise’s
 <code>then()</code>, which runs in the app’s process.</li>
 </ul>
@@ -228,11 +229,13 @@ use their own classes: <code>shiny-html-output</code> for
 page sets the input to the id and spigot swaps the value back in. So
 <code>input[[name]]</code> is <code><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical()</a></code> to
 <code>value</code>: data frames, factors, dates and <code>NA</code>
-arrive unchanged.</li>
+arrive unchanged. The value stays in the session until the page sends
+the id back, or the session ends.</li>
 <li>
 <strong>It runs after the endpoint returns,</strong> in Shiny’s
-normal reactive flush, and only if the tab is open. It takes one more
-trip over the websocket, about as long as any Shiny input change.</li>
+normal reactive flush, and only if the tab is open and has loaded
+spigot.js (every spigot page has). It takes one more trip over the
+websocket, about as long as any Shiny input change.</li>
 <li>
 <strong>Every trigger fires.</strong> Observers run even when the
 value equals the last one.</li>

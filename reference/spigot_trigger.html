@@ -17,7 +17,7 @@ spigot_emit()."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -94,19 +94,12 @@ function's <code>session</code>.</p></dd>
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The input is set the normal Shiny way: spigot asks the page, and the page
-calls <code>Shiny.setInputValue()</code> with <code>priority: "event"</code>. So the observers
-run in a regular reactive flush, and every trigger fires them, even with
-the same value as the last one. It takes one extra trip over the
-websocket, about as long as any input change takes Shiny.</p>
-<p><code>value</code> itself never leaves R: the page sends back only an id, and
-<code>input[[name]]</code> is <code><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical()</a></code> to <code>value</code>. Data frames, factors, dates,
-<code>NA</code> and objects JSON cannot hold arrive unchanged. The value is kept in
-the session until the page sends the id back (or the session ends).</p>
-<p>Because the page sets the input, the trigger reaches the observers <em>after</em>
-the endpoint has returned, and only if the page is open and loaded
-spigot.js (every spigot page does). Called with a module's <code>session</code>,
-<code>name</code> is namespaced like the module's own inputs.</p>
+    <p><code>value</code> itself never leaves R: <code>input[[name]]</code> is <code><a href="https://rdrr.io/r/base/identical.html" class="external-link">identical()</a></code> to
+<code>value</code>, so data frames, factors, dates, <code>NA</code> and objects JSON cannot hold
+arrive unchanged. Every trigger fires the observers, even with the same
+value as the last one. Called with a module's <code>session</code>, <code>name</code> is
+namespaced like the module's own inputs. See
+<code><a href="../articles/reactivity.html">vignette("reactivity", package = "spigot")</a></code> for how and when it runs.</p>
     </div>
 
     <div class="section level2">

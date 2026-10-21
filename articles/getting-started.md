@@ -74,8 +74,8 @@ spigot_app(
 
 [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
 returns an ordinary Shiny app object, so `shiny::runApp("minimal")`,
-Shiny Server and Posit Connect all run it like any other app. Its
-arguments:
+Shiny Server and Posit Connect all run the folder like any other app
+(see [Running the app](#running)). Its arguments:
 
 - `pages`: one page, served at `/`, or a named list of pages keyed by
   path.
@@ -84,6 +84,40 @@ arguments:
 - `prefix`: where the API is mounted; `"/api"` by default.
 - `server`: an optional Shiny server function, for push and reactivity.
 - `require_session`: `TRUE` by default; see [Sessions](#sessions) below.
+
+### Running the app
+
+Run the app’s folder:
+
+``` r
+
+shiny::runApp("minimal")   # or shiny::runApp("minimal/app.R")
+```
+
+RStudio’s Run App button, Shiny Server, Posit Connect and
+[`run_example()`](https://kent-orr.github.io/spigot/reference/run_example.md)
+do the same. Shiny loads any `.R` files in the folder’s `R/` subfolder,
+sources `app.R` from inside the folder, serves `www/`, and keeps the
+folder as the working directory while the app runs.
+
+Running the app *object* is different. Printing the object
+[`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+returns runs it, and that happens at the console, when `app.R` is
+sourced with echo, and with `Rscript app.R`. Shiny then does none of the
+above:
+
+|  | `runApp("minimal")` | the printed object |
+|----|----|----|
+| `spigot_page("index.html")`, `api = "api.R"` | read from the folder | read from the working directory, an error if they are not there |
+| files in `www/` | served | `404` |
+| functions in `R/` | loaded | not loaded |
+
+So a page’s `<script src="app.js">` gets spigot’s HTML 404 page, which
+the browser refuses to run (“blocked due to MIME type”), and an endpoint
+that calls a function from `R/` fails with a `500`. From a terminal, use
+`Rscript -e 'shiny::runApp("minimal")'`. An app that keeps its page and
+API in one script, like the one in the README, reads no files and runs
+either way.
 
 ### `api.R`: the endpoints
 

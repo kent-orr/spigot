@@ -9,7 +9,7 @@ else. Use it directly only for a page that spigot_app() does not serve."></head>
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -64,7 +64,8 @@ else. Use it directly only for a page that <code><a href="spigot_app.html">spigo
 
 
 <dl><dt id="arg-prefix">prefix<a class="anchor" aria-label="anchor" href="#arg-prefix"></a></dt>
-<dd><p>The API prefix, as given to <code><a href="spigot_app.html">spigot_app()</a></code>.</p></dd>
+<dd><p>The API prefix, as given to <code><a href="spigot_app.html">spigot_app()</a></code>. The script tag
+carries it as <code>data-prefix</code>, which is where spigot.js reads it from.</p></dd>
 
 </dl></div>
     <div class="section level2">
@@ -73,30 +74,11 @@ else. Use it directly only for a page that <code><a href="spigot_app.html">spigo
     </div>
     <div class="section level2">
     <h2 id="details">Details<a class="anchor" aria-label="anchor" href="#details"></a></h2>
-    <p>The script defines <code>window.spigot</code>:</p><ul><li><p><code>spigot.ready</code>: a promise that resolves with the session token once the
-Shiny session has started. Calls made earlier wait for it.</p></li>
-<li><p><code>spigot.get(path, query, options)</code>, <code>spigot.del(path, query, options)</code>,
-<code>spigot.post(path, body, options)</code>, <code>spigot.put(path, body, options)</code>, and
-<code>spigot.request(method, path, options)</code> with <code>options</code> <code>query</code>, <code>body</code>,
-<code>headers</code> and <code>timeout</code> (milliseconds). They resolve with the parsed JSON
-reply (text if the reply is not JSON, <code>null</code> if it is empty).</p></li>
-<li><p><code>spigot.SpigotError</code>: what they reject with, for a non-2xx reply or when
-no reply arrives. It has <code>status</code> (<code>0</code> for a timeout or network failure),
-<code>message</code> (the reply's JSON <code>error</code> field when there is one) and <code>body</code>.</p></li>
-<li><p><code>spigot.on(event, fn)</code>: calls <code>fn(data, event)</code> for each event that R
-pushes with <code><a href="spigot_emit.html">spigot_emit()</a></code> or <code><a href="spigot_emit.html">spigot_broadcast()</a></code>. Returns a function
-that removes the listener. <code>spigot.off(event, fn)</code> removes <code>fn</code>;
-<code>spigot.off(event)</code> removes every listener of <code>event</code>. A listener that
-throws does not stop the others; its error is still reported.</p></li>
-</ul><p>On a page below the top level, which <code><a href="spigot_app.html">spigot_app()</a></code> gives a
-<code>&lt;base href&gt;</code>, the script also keeps plain clicks on <code>href="#section"</code>
-links on the page (see <code><a href="spigot_page.html">spigot_page()</a></code>).</p>
-<p>Paths are relative to the API, so <code>spigot.get("items")</code> and
-<code>spigot.get("/items")</code> both request <code>api/items</code> relative to the page. This
-keeps working when the app is served under a subpath. Every request carries
-the tab's session token in the <code>X-Spigot-Session</code> header. <code>FormData</code>,
-<code>Blob</code>, <code>URLSearchParams</code> and <code>ArrayBuffer</code> bodies are sent unchanged; any
-other body, strings included, is sent as JSON.</p>
+    <p>The script defines <code>window.spigot</code>: <code>spigot.get()</code>, <code>spigot.post()</code> and
+the other request functions call the API with the tab's session and
+resolve with the parsed reply or reject with a <code>spigot.SpigotError</code>;
+<code>spigot.on()</code> listens for events pushed with <code><a href="spigot_emit.html">spigot_emit()</a></code>. See
+<code><a href="../articles/client.html">vignette("client", package = "spigot")</a></code>.</p>
     </div>
 
     <div class="section level2">
@@ -104,7 +86,7 @@ other body, strings included, is sent as JSON.</p>
     <div class="sourceCode"><pre class="sourceCode r"><code><span class="r-in"><span><span class="fu">spigot_dependency</span><span class="op">(</span><span class="op">)</span></span></span>
 <span class="r-out co"><span class="r-pr">#&gt;</span> List of 10</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  $ name      : chr "spigot"</span>
-<span class="r-out co"><span class="r-pr">#&gt;</span>  $ version   : chr "0.1.0"</span>
+<span class="r-out co"><span class="r-pr">#&gt;</span>  $ version   : chr "0.1.1"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  $ src       :List of 1</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>   ..$ file: chr "js"</span>
 <span class="r-out co"><span class="r-pr">#&gt;</span>  $ meta      : NULL</span>

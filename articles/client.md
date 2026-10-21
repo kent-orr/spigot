@@ -4,7 +4,7 @@
 adds `spigot.js` to every page it serves, after jQuery and Shiny’s own
 script. It defines `window.spigot`. It is plain JavaScript with no build
 step, and needs only what every current browser has: `fetch`, `Promise`,
-`URL` and `AbortController`.
+`URL`, `AbortController` and `ReadableStream`.
 
 For a page that
 [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)

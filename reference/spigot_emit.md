@@ -60,13 +60,8 @@ becomes `null` and data frames become arrays of row objects.
 
 Events go over the tab's Shiny websocket as soon as they are emitted. An
 event emitted by an endpoint can reach the page *before* the endpoint's
-HTTP response does. Events sent before the page has called `spigot.on()`
-for them are dropped.
-
-Call these from the app's own R process (an endpoint, an observer, a
-[`later::later()`](https://later.r-lib.org/reference/later.html)
-callback). A `future` worker is another process and has no sessions;
-emit from the promise's `then()` instead.
+HTTP response does. See
+[`vignette("reactivity", package = "spigot")`](https://kent-orr.github.io/spigot/articles/reactivity.md).
 
 ## Examples
 

@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -47,6 +47,10 @@
     </div>
 
     <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.1.1" id="spigot-011">spigot 0.1.1<a class="anchor" aria-label="anchor" href="#spigot-011"></a></h2>
+<ul><li>Internal simplification; no change to behaviour, except that <code>/reactlog</code> now gets the app’s own 404 instead of Shiny’s reactlog. <code>spigot.js</code> now uses current JavaScript syntax (ES2017) and needs <code>fetch</code>, <code>AbortController</code> and <code>ReadableStream</code>, which every current browser has. A <code>{{&gt; name}}</code> partial missing from <code>partials</code> is caught when the page is created.</li>
+</ul></div>
+    <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.0" id="spigot-010">spigot 0.1.0<a class="anchor" aria-label="anchor" href="#spigot-010"></a></h2>
 <ul><li>First release. <code><a href="../reference/spigot_app.html">spigot_app()</a></code> mounts a plumber router inside a Shiny app, so hand-written pages (<code><a href="../reference/spigot_page.html">spigot_page()</a></code>) call R endpoints on the same origin and port through <code>spigot.js</code>.</li>
 <li>API requests are bound to the calling tab’s Shiny session (<code><a href="../reference/spigot_session.html">spigot_session()</a></code>). By default only open pages of the app can call the API, and cross-origin requests are refused.</li>
@@ -54,7 +58,8 @@
 <code><a href="../reference/spigot_emit.html">spigot_emit()</a></code> and <code><a href="../reference/spigot_emit.html">spigot_broadcast()</a></code> push events to pages; <code><a href="../reference/spigot_trigger.html">spigot_trigger()</a></code> sets a Shiny input from an endpoint.</li>
 <li>Three examples: <code>run_example("minimal")</code>, <code>"live"</code> and <code>"site"</code>.</li>
 </ul></div>
-  </main></div>
+  </main><aside class="col-md-3"><nav id="toc" aria-label="Table of contents"><h2>On this page</h2>
+    </nav></aside></div>
 
 
     <footer><div class="pkgdown-footer-left">

@@ -84,9 +84,10 @@ Things to know about push:
   several processes for one app, tabs in other processes do not get the
   event. Pushing across processes needs an outside relay, such as Redis
   or Postgres `LISTEN/NOTIFY`, and spigot does not provide one.
-- **Push from the app’s process.** A `future` worker is another R
-  process and has no sessions. Emit from the promise’s `then()`, which
-  runs in the app’s process.
+- **Push from the app’s process**: an endpoint, an observer, a
+  [`later::later()`](https://later.r-lib.org/reference/later.html)
+  callback. A `future` worker is another R process and has no sessions.
+  Emit from the promise’s `then()`, which runs in the app’s process.
 
 ## The bridge: `spigot_trigger()`
 
@@ -119,10 +120,12 @@ How it behaves:
   sends the page only an id; the page sets the input to the id and
   spigot swaps the value back in. So `input[[name]]` is
   [`identical()`](https://rdrr.io/r/base/identical.html) to `value`:
-  data frames, factors, dates and `NA` arrive unchanged.
+  data frames, factors, dates and `NA` arrive unchanged. The value stays
+  in the session until the page sends the id back, or the session ends.
 - **It runs after the endpoint returns,** in Shiny’s normal reactive
-  flush, and only if the tab is open. It takes one more trip over the
-  websocket, about as long as any Shiny input change.
+  flush, and only if the tab is open and has loaded spigot.js (every
+  spigot page has). It takes one more trip over the websocket, about as
+  long as any Shiny input change.
 - **Every trigger fires.** Observers run even when the value equals the
   last one.
 - **Modules.** Called with a module’s `session`, `name` is namespaced

@@ -13,7 +13,7 @@ In the page, spigot.on(event, function (data, event) { ... }) receives it."></he
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -111,11 +111,7 @@ the same shape as an API response would: length-1 vectors become scalars
 become arrays of row objects.</p>
 <p>Events go over the tab's Shiny websocket as soon as they are emitted. An
 event emitted by an endpoint can reach the page <em>before</em> the endpoint's
-HTTP response does. Events sent before the page has called <code>spigot.on()</code>
-for them are dropped.</p>
-<p>Call these from the app's own R process (an endpoint, an observer, a
-<code><a href="https://later.r-lib.org/reference/later.html" class="external-link">later::later()</a></code> callback). A <code>future</code> worker is another process and has no
-sessions; emit from the promise's <code>then()</code> instead.</p>
+HTTP response does. See <code><a href="../articles/reactivity.html">vignette("reactivity", package = "spigot")</a></code>.</p>
     </div>
 
     <div class="section level2">

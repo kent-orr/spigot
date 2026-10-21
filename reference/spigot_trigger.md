@@ -35,23 +35,14 @@ spigot_trigger(session, name, value)
 
 ## Details
 
-The input is set the normal Shiny way: spigot asks the page, and the
-page calls `Shiny.setInputValue()` with `priority: "event"`. So the
-observers run in a regular reactive flush, and every trigger fires them,
-even with the same value as the last one. It takes one extra trip over
-the websocket, about as long as any input change takes Shiny.
-
-`value` itself never leaves R: the page sends back only an id, and
-`input[[name]]` is
-[`identical()`](https://rdrr.io/r/base/identical.html) to `value`. Data
-frames, factors, dates, `NA` and objects JSON cannot hold arrive
-unchanged. The value is kept in the session until the page sends the id
-back (or the session ends).
-
-Because the page sets the input, the trigger reaches the observers
-*after* the endpoint has returned, and only if the page is open and
-loaded spigot.js (every spigot page does). Called with a module's
-`session`, `name` is namespaced like the module's own inputs.
+`value` itself never leaves R: `input[[name]]` is
+[`identical()`](https://rdrr.io/r/base/identical.html) to `value`, so
+data frames, factors, dates, `NA` and objects JSON cannot hold arrive
+unchanged. Every trigger fires the observers, even with the same value
+as the last one. Called with a module's `session`, `name` is namespaced
+like the module's own inputs. See
+[`vignette("reactivity", package = "spigot")`](https://kent-orr.github.io/spigot/articles/reactivity.md)
+for how and when it runs.
 
 ## Examples
 

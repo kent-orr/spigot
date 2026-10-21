@@ -11,7 +11,7 @@ handled by Shiny as usual (www/ files, for an app directory)."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -160,6 +160,23 @@ for you, so a page's own code calls the API with
 (5 MB by default) before any R handler runs. That response is Shiny's own:
 status <code>413</code> with the <strong>plain-text</strong> body <code>Maximum upload size exceeded</code>,
 not JSON. Clients should not assume every error body is JSON.</p>
+    </div>
+    <div class="section level2">
+    <h2 id="running-the-app">Running the app<a class="anchor" aria-label="anchor" href="#running-the-app"></a></h2>
+
+
+<p>Run an app directory: <code>shiny::runApp("myapp")</code> or <code>runApp("myapp/app.R")</code>,
+as RStudio's Run App button, Shiny Server and Posit Connect do. Shiny loads
+the files in <code>R/</code>, then sources <code>app.R</code> with the directory as the working
+directory, serves <code>www/</code>, and keeps that working directory while the app
+runs.</p>
+<p>Printing the object <code>spigot_app()</code> returns also runs the app (at the
+console, when <code>app.R</code> is sourced with echo, or with <code>Rscript app.R</code>), but
+Shiny then does none of that. Template and plumber file paths are relative
+to whatever the working directory is, <code>www/</code> files get the <code>404</code> HTML page
+(so a browser refuses to run a <code>www/</code> script), and endpoints can't call
+functions from <code>R/</code>. From a terminal, use
+<code>Rscript -e 'shiny::runApp("myapp")'</code>.</p>
     </div>
 
     <div class="section level2">

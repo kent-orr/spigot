@@ -210,7 +210,8 @@ warm-up iterations:
   [`promises::finally()`](https://rstudio.github.io/promises/reference/then.html),
   not [`on.exit()`](https://rdrr.io/r/base/on.exit.html), because
   plumber routes after async filters resolve. Test: “the prefix stays
-  stripped until an async filter has finished routing”.
+  stripped until an async filter has finished routing”. *Superseded in
+  M9: the request is no longer restored.*
 - Mount-level failures (sync or async) →
   `{"error":"internal server error"}` 500. The condition message goes to
   stderr via [`message()`](https://rdrr.io/r/base/message.html) and
@@ -717,3 +718,122 @@ warm-up iterations:
   spigot’s; **1.11.0 passes everything**. `DESCRIPTION` now has
   `shiny (>= 1.11.0)`, and CI has a cell pinned to 1.11.0. F1, F4 and F9
   hold back to 1.8.0.
+
+## 2026-10-16 — M8: `/reactlog` is a 404 under spigot
+
+- `page_router()` used to return `NULL` for `/reactlog` and
+  `/reactlog/...` so Shiny’s reactlog handler could answer. That special
+  case is gone: a spigot app answers `/reactlog` with its own 404, like
+  any other unknown path. reactlog is a development tool; a user who
+  needs it under spigot can add a page or open an issue.
+- Removed with it in the 0.1.1 simplification pass, none user-visible:
+  the `shiny.appobj` and `httpHandler` checks in internal `mount_app()`
+  (its only caller passes
+  [`shiny::shinyApp()`](https://rdrr.io/pkg/shiny/man/shinyApp.html)’s
+  result), the idempotency branch in `register_session()` (only
+  `wrap_server()` calls it, once per session), and
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)’s
+  [`missing()`](https://rdrr.io/r/base/missing.html) checks (R’s own
+  “argument is missing” error remains).
+
+## 2026-10-16 — M9: the mount handler does not restore the request (supersedes M1)
+
+- `spigot_mount_handler()` used to put `PATH_INFO` and `SCRIPT_NAME`
+  back after plumber answered
+  ([`on.exit()`](https://rdrr.io/r/base/on.exit.html) for sync results,
+  [`promises::finally()`](https://rstudio.github.io/promises/reference/then.html)
+  for async). Shiny’s `routeHandler` does that because a routed handler
+  may return `NULL` and let the next handler see the request.
+  `shiny:::joinHandlers` (checked, 1.14.0) only moves on to the next
+  handler on `NULL`.
+- spigot’s handler never returns `NULL` under the prefix: the guard’s
+  denial, `pr$call()`’s result and `mount_failure()` are all responses.
+  So nothing reads the request afterwards, and the restore is gone.
+  Paths outside the prefix go to the fallback before any rewrite.
+- The async-filter test stays: plumber still has to see the stripped
+  path inside an async filter, and it does, because nothing puts the
+  prefix back.
+- Three test assertions checked the restore and went with it: after a
+  sync call, after an async call, and after a sync mount-level failure
+  (“a mount-level failure is a JSON 500”). PLAN M9 listed only the first
+  two; the third is the same behaviour on the error path, not a further
+  change.
+
+## 2026-10-16 — M10: partials are checked once, when the page is created
+
+- `render_whisker()` no longer runs whisker inside
+  [`setwd()`](https://rdrr.io/r/base/getwd.html) to an empty temp
+  directory, and no longer turns whisker’s “No partial” warning into an
+  error. `check_partial_refs()` already rejects any `{{> name}}` not in
+  `partials` when the page is created, with the better message;
+  [`setwd()`](https://rdrr.io/r/base/getwd.html) on every request in a
+  server is a global side effect.
+- What this gives up: a `{{> name}}` tag after a delimiter change
+  (`{{=<% %>=}}`) is not seen by the creation-time scan. Such an unknown
+  partial now gets whisker’s default: a `name.mustache` file in the
+  working directory if there is one, else a warning and empty output.
+  Accepted: the construction check catches every ordinary case.
+
+## 2026-10-21 — Launch modes: `www/` and `R/` are Shiny’s, and only for an app directory
+
+- **Found by** a user writing an app from scratch: sourcing `app.R` and
+  running the object it returned (an editor’s Source button) gave
+  Firefox “blocked due to MIME type (text/html)” for `www/app.js`. The
+  script got spigot’s HTML 404 page.
+- **Cause** (checked, shiny 1.14.0): `runApp("<dir>")`,
+  `runApp("<dir>/app.R")` and `shinyAppDir()` all go through
+  `shiny:::shinyAppDir_appR`, which loads `R/` into a shared
+  environment, sources `app.R` with `setwd(appDir)`, registers `www/` as
+  an httpuv static path at `/`, and sets the working directory to
+  `appDir` in its `onStart`. Running the `shiny.appobj` itself
+  (`print.shiny.appobj()` is `runApp(x)`, which is also what the
+  console, `source(echo = TRUE)` and `Rscript app.R` do) does none of
+  these.
+- **Decision:** no change to spigot. The behaviour is pinned in
+  `test-launch.R` (fixture `apps/launch/`) and documented in
+  [`?spigot_app`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  (“Running the app”) and the getting-started vignette, which point to
+  `runApp("<dir>")`.
+- **Considered:** `shinyAppDir_appR` builds its own `staticPaths` and
+  ignores the inner app’s, so
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  could set `app$staticPaths` to serve `www/` in object mode without
+  changing directory mode. Not done: the folder would be resolved
+  against the working directory when
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  is called, which is the guess that failed here, and `R/` still would
+  not be loaded, so the app would break one request later. If this keeps
+  coming up, the better fix is probably a message when the app starts in
+  object mode while a `www/` folder sits in the working directory.
+
+## 2026-10-21 — M11: spigot.js is ES2017 (supersedes the M3 ES5 note)
+
+- **Baseline ES2017**, still no build step. The file already required
+  `fetch`, `URL`, `AbortController` and `ReadableStream`, and every
+  browser with those has `class`, arrow functions, `const`/`let`,
+  template literals and `async`/`await`. The ES5 rule bought no browser
+  and cost a hand-built promise in `request()`, an
+  `Object.create(Error.prototype)` constructor, a `withOption()` copy
+  loop and `typeof` guards in `isRawBody()`. `SpigotError` is now
+  `class SpigotError extends Error`, so `instanceof Error` still holds.
+- **ES2017, not ES2018:** PLAN M11 step 6 wrote `{ ...options, query }`,
+  but object spread is ES2018 (EdgeHTML had `AbortController` and
+  `async` but not object spread). The shorthand is
+  `Object.assign({}, options, { query })`. Checked by parsing the file
+  with acorn at `ecmaVersion: 2017` (passes) and `2016` (fails on
+  `async`).
+- **`ReadableStream` is now required.** Dropping the `typeof` guards
+  means `body instanceof ReadableStream` throws where it is undefined:
+  Firefox 57-64 had `AbortController` but not `ReadableStream`. Accepted
+  (those versions are from 2017-2018); the header comment lists it with
+  the other required APIs.
+- **Still a classic script in an IIFE.** A module is deferred and sees
+  `document.currentScript === null`, which breaks the `data-prefix` read
+  and the guarantee that `shiny.js` runs first. The IIFE keeps spigot’s
+  names private: a top-level `const` in a classic script is a global
+  lexical binding shared with the page’s own scripts, and the examples
+  declare `const $`.
+- `request()` is an `async function`: `Promise.race()` of the timeout
+  and the call, with `clearTimeout()` in `finally`. A call that times
+  out while still waiting for `spigot.ready` never fetches (it checks
+  `signal.aborted` after the wait), as before.
