@@ -263,3 +263,191 @@ vignette does not, move it there, do not delete it.
 - The `looks_like_text()` template-or-path heuristic, the `later::later()` static-path
   exclusion, the `</head>` split, by-reference `spigot_trigger()`, and the `<base href>`
   plus fragment-click handler all have recorded reasons and stay.
+
+## 5. Next release: 0.2.0 — a Flask-shaped surface (M14–M17)
+
+Design conversation 2026-10-21. spigot was written to give a Flask + Jinja
+development flow on a Shiny Server platform. 0.1.x has the pieces (pages, whisker
+templates, partials, a plumber API, `www/`) but not the shape: no blueprint, no
+template search path, no static dirs beyond `www/`, every file path relative to the
+working directory. 0.2.0 adds that shape **additively**: every new argument defaults
+to 0.1.1 behaviour, the three examples and `apps/launch/` run unchanged until M17
+rewrites one of them to show the new surface.
+
+Target surface, so the milestones below have something to point at:
+
+```r
+# app.R
+spigot_app(
+  pages      = list("/" = spigot_page("index.html")),
+  api        = "api.R",
+  blueprints = list("/cars" = cars, "/model" = model),   # objects from R/
+  templates  = "templates",            # search path: dirs and/or files
+  partials   = "templates/partials",   # a dir: one partial per file, keyed by stem
+  static     = "static",               # served at /static; named list for several
+  root       = "."                     # what the paths above resolve against
+)
+
+# R/cars.R
+cars <- spigot_blueprint(
+  pages     = list("/" = spigot_page("list.html"), "/model" = spigot_page("model.html")),
+  api       = "api/cars.R",            # mounted at /api/cars
+  templates = "templates/cars",        # searched before the app's
+  partials  = "templates/cars/partials",
+  static    = "static/cars"            # served at /cars/static
+)
+```
+
+Decisions taken in the design conversation, to be entered in DECISIONS.md as each
+milestone lands (the "why" belongs there, not here):
+
+- **Paths resolve against `root`** at construction, and `root` defaults to the working
+  directory then. In directory mode that is the app directory (DECISIONS, 2026-10-21
+  launch modes); in object mode it is whatever it is, as for templates today.
+- **Static dirs are served by httpuv**, not R. `addResourcePath()` takes one segment,
+  but `server$setStaticPath()` takes any prefix, and `mount_app()` already calls it at
+  start. Directory mode: set the paths in the existing on-start hook. Object mode:
+  `app$staticPaths`, which `runApp(<appobj>)` honours (the "considered" option of the
+  launch-modes decision, now with `root` to make it right).
+- **No filename-only static references.** `src="cars.js"` would need every static dir
+  root-mounted, which Shiny owns in directory mode, so spigot would serve files from R
+  after a page miss and file names would collide with page paths. Instead
+  `src="static/app.js"` resolves at any depth via the `<base href>`, and a blueprint
+  page gets `{{static}}` in its data (`"cars/static"`) so its template needs no
+  knowledge of its prefix. whisker has no lambdas (checked: a function as a section
+  value renders empty), so a Flask `url_for` helper is not possible; a variable is.
+- **A blueprint's API mounts under the app prefix**, `/api/<name>/...`, with
+  `plumber::pr_mount()`. One guard, one prefix for spigot.js, `check_pages_vs_prefix()`
+  unchanged; the client calls `spigot.get("cars/fit")`. Flask's `/cars/api/...` was
+  considered and rejected for those three reasons.
+- **Template files are read when the app is built**, not when `spigot_page()` is
+  called, because a name can only be resolved once the page knows its blueprint and
+  the app's search path. Still before the app runs; the "can't find" error keeps its
+  text and gains the search path it tried.
+- **`www/` and `R/` stay Shiny's.** `static` is in addition to `www/`, never a
+  replacement. Blueprints live in `R/` because Shiny loads it; spigot adds no loader.
+
+Open, defaults chosen for this plan: dynamic segments (`/cars/<id>`) are **not** in
+0.2.0; `data = function(req)` reads the query string, and converters are a 0.3.0
+question.
+
+Ground rules of §1 apply. Line references are to the 0.1.1 sources once M13 is
+tagged. Expectation count goes **up** in every milestone; note the number in each
+commit message.
+
+### M14: `root` and `static`
+
+**Why.** Independent of templates and blueprints, and testable against the
+`apps/launch/` fixture and `test-launch.R` already in place for the launch-modes
+decision. Lands the httpuv static-path mechanism that blueprints reuse.
+
+1. Test, `test-launch.R`: add `static/extra.js` to `apps/launch/` and a `static = `
+   argument to its `app.R`. Directory mode (all three existing launch tests) and
+   object mode serve `/static/extra.js` with a JavaScript content type. `www/app.js`
+   keeps its existing expectations in both modes (404 in object mode: unchanged).
+2. Test, new `test-static.R` (unit, no server): `check_static()` accepts a string
+   (prefix `/static`), a named list (prefix `/<name>` each), rejects an unnamed list of
+   two, a name with a slash, a name in `reserved_prefixes`, a dir that does not exist
+   (error names `root`), and a prefix equal to or under the API `prefix`.
+3. Test, `test-static.R`: `resolve_root()` with `root = "."` returns the normalized
+   working directory; with a relative `root` resolves it against the working
+   directory; errors when the dir does not exist.
+4. Code, new `R/static.R`: `check_static()`, `resolve_root()`, `static_paths()`
+   returning a named list of normalized dirs keyed by URL prefix.
+5. Code, `R/mount.R`: `mount_app()` gains `static = list()`. Directory mode: the
+   existing on-start `later::later()` call also sets the static paths. Object mode:
+   `app$staticPaths` is set from the same list. Both from one helper so the two modes
+   cannot drift.
+6. Code, `R/app.R`: `spigot_app(static = NULL, root = ".")`. `NULL` is 0.1.1
+   behaviour exactly. Help: a "Files" section replacing the `www/` sentence in
+   "Running the app".
+7. Test, `test-page.R`: a page at `/docs/intro` whose template has
+   `<script src="static/a.js">` loads it (the `<base href>` already does this; the
+   test pins that `static` and nested pages compose).
+
+### M15: template search path and partial dirs
+
+**Why.** `spigot_page("index.html")` should mean "the template named index.html",
+not "the file at ./index.html", once the app says where templates are. Blueprints
+need the loader to exist before they can put their own dir in front of it.
+
+1. Test, new `test-templates.R`: `template_loader(dirs, root)` finds `a.html` in the
+   second dir when the first lacks it; the first dir wins on a tie; a single file in
+   `templates = ` is found by basename; a name that is a path relative to `root` still
+   resolves last (0.1.1 compatibility); the error for a miss lists the dirs tried.
+2. Test, `test-templates.R`: `partials = "<dir>"` yields one partial per file keyed by
+   the filename without extension; a dir with `nav.html` and `nav.mustache` is an
+   error (duplicate key); a named list is unchanged; a list may mix dirs and strings
+   only at the top level (`list(nav = "x.html")`, not `list("dir")`).
+3. Test, `test-page.R`: `spigot_page("missing.html")` no longer errors at creation;
+   `spigot_app(pages = spigot_page("missing.html"))` errors with the 0.1.1 message
+   plus the search path. Move the existing "can't find" expectations accordingly.
+   Text templates (`looks_like_text()`) are untouched and still render at creation.
+4. Code, `R/page.R`: `spigot_page()` keeps the template string unresolved when it is a
+   path; `render` is built by a new `resolve_page(page, loader, partials)` called from
+   `as_pages()`. `print.spigot_page()` shows "unresolved" until then. The `</head>`
+   and partial-reference checks (M10) move to `resolve_page()`, same messages.
+5. Code, new `R/templates.R`: `template_loader()`, `read_partials_dir()`,
+   `merge_partials(app, page)` (page-level `partials` win over app-level).
+6. Code, `R/app.R`: `spigot_app(templates = NULL, partials = NULL)`. `NULL` is 0.1.1
+   behaviour. `templates = "templates"` is **not** the default: a default that depends
+   on whether a dir exists is the kind of guess the launch-modes decision warns about.
+   The vignette shows the one-line opt-in.
+
+### M16: blueprints
+
+**Why.** The point of the release. Built on M14 (per-blueprint static prefix) and
+M15 (per-blueprint loader and partials).
+
+1. Test, new `test-blueprint.R` (unit): `spigot_blueprint()` returns a
+   `spigot_blueprint` with `pages`, `api` (a `Plumber`, from a file or router or
+   `NULL`), `templates`, `partials`, `static`; rejects a page path that is not a page
+   path, an `api` that is neither; `print()` lists pages and whether it has an API.
+2. Test, `test-blueprint.R`: `register_blueprints(app_pages, blueprints, prefix)`
+   returns the merged page list with `/cars` + `/` = `/cars`, `/cars` + `/model` =
+   `/cars/model`; a collision with an app page or another blueprint is an error naming
+   both; a blueprint prefix under the API `prefix` is an error (reuse
+   `check_pages_vs_prefix()`); `/` is not a valid blueprint prefix.
+3. Test, `test-blueprint.R`: a blueprint page's `data` gains `static = "cars/static"`
+   when the blueprint has `static`, and nothing otherwise; a function `data` gets it
+   added to its result; a user key `static` wins (documented, not an error).
+4. Test, `test-blueprint.R` (server, `helper-server.R`): an app with one blueprint
+   serves `/cars`, `/cars/model`, `/cars/static/cars.js`, and `/api/cars/fit`; the
+   session guard applies to `/api/cars/fit` (401 without a token); the blueprint's
+   templates dir shadows the app's for a same-named template; the blueprint's partial
+   `nav` shadows the app's.
+5. Test, `test-client.R`: `spigot.get("cars/fit")` reaches the mounted router
+   (one e2e case; the prefix handling in spigot.js is unchanged, this pins that).
+6. Code, new `R/blueprint.R`: `spigot_blueprint()`, `print.spigot_blueprint()`,
+   `register_blueprints()`. API mounting: `plumber::pr_mount(app_pr, "/<name>", bp_pr)`
+   where `<name>` is the blueprint prefix without its slash; `spigot_api()` builds the
+   blueprint router so it gets `spigot_json()`. Static: each blueprint's dir is added
+   to the M14 list under `<prefix>/static`.
+7. Code, `R/app.R`: `spigot_app(blueprints = NULL)`; `as_pages()` runs after
+   `register_blueprints()`, so every existing path check applies to the merged list.
+   Help: a "Blueprints" section; `?spigot_blueprint` is reference only (M12 rule).
+
+### M17: example, vignette, release 0.2.0
+
+1. Rewrite `inst/examples/site/` onto the new surface: `templates/`, `static/`, the
+   `/cars` and `/model` pages as two blueprints in `R/`, `www/` gone from it. The
+   `test-examples.R` expectations for `site` change only in the URLs of its script
+   files; the page content expectations stay. `minimal` and `live` are left on the
+   0.1.1 surface on purpose, so both ways are exercised.
+2. New vignette `flask-flow.Rmd`: the project layout, one blueprint, what `root`
+   means under each launch mode. Narrative only (M12 rule); the help pages hold the
+   argument details.
+3. `NEWS.md` 0.2.0: blueprints, template search path, partial dirs, static dirs,
+   `root`; "template files are now read when the app is built". No breaking change.
+4. `DESCRIPTION` 0.2.0; full suite with Chrome; 4 CI cells green; pkgdown green;
+   tag `v0.2.0`.
+
+### Deliberately not in 0.2.0
+
+- Dynamic path segments and converters (`/cars/<id>`). Needs a routing change in
+  `page_router()` and a decision on how matched values reach `data`; 0.3.0.
+- A `url_for`-style helper in templates. Not possible in whisker without lambdas;
+  `{{static}}` and the `<base href>` cover the cases found so far.
+- Serving static files from R so a bare filename works. Rejected above.
+- A default `templates = "templates"`. Rejected above; revisit if the one-line
+  opt-in turns out to be what every app writes.
