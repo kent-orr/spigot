@@ -11,6 +11,8 @@ spigot_app(
   prefix = "/api",
   require_session = TRUE,
   max_request_size = NULL,
+  templates = NULL,
+  partials = NULL,
   static = NULL,
   root = "."
 )
@@ -36,12 +38,22 @@ the endpoint, where \code{\link[=spigot_session]{spigot_session()}} returns \cod
 \code{\link[shiny:fileInput]{shiny::fileInput()}} uploads). \code{Inf} removes the limit. \code{NULL} leaves the
 option as it is.}
 
+\item{templates}{Where \code{\link[=spigot_page]{spigot_page()}} template files are looked up, in
+order: directories, or files matched by their name. A name not found
+there is a path relative to \code{root}. \code{NULL} looks only there.}
+
+\item{partials}{Partials every page can use: a directory, holding one
+partial per file named by the file name without its extension
+(\code{nav.html} is \verb{\{\{> nav\}\}}), or a named list like \code{\link[=spigot_page]{spigot_page()}}'s. A
+page's own partials win over these.}
+
 \item{static}{Directories of files to serve as they are: one directory,
 served at \verb{/static}, or a named list of them, served at \verb{/<name>} each.
 \code{NULL} serves none. See the Files section.}
 
-\item{root}{The directory that relative \code{static} paths are relative to.
-A relative \code{root} is relative to the working directory when
+\item{root}{The directory that relative \code{templates}, \code{partials} and
+\code{static} paths, and template file names not on the search path, are
+relative to. A relative \code{root} is relative to the working directory when
 \code{spigot_app()} is called.}
 }
 \value{

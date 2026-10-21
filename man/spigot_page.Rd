@@ -13,7 +13,8 @@ spigot_page(template, data = list(), partials = list(), cache = FALSE)
 returns one. A function is called for every request, with the request
 (the Rook environment) if it takes an argument.}
 
-\item{partials}{A named list of partial templates: text or file paths.}
+\item{partials}{A named list of partial templates: text or file names.
+They win over the app's partials of the same name.}
 
 \item{cache}{If \code{TRUE}, the page is rendered on its first request and that
 result is served from then on. Needs static \code{data}.}
@@ -32,19 +33,22 @@ as a \href{https://github.com/edwindj/whisker}{whisker} (Mustache) template.
 \section{Templates}{
 
 The template must be a full document with a \verb{</head>} tag (in any case),
-either in the template itself or in a partial. Shiny's scripts go just
-before it. A string containing \code{<}, \verb{\{\{} or a line break is the template
-text; any other string is the path of a file holding it, read as UTF-8
-when \code{spigot_page()} is called. A relative path is relative to the working
-directory then, which is the app's directory when the app directory is run
-with \code{\link[shiny:runApp]{shiny::runApp()}} (see "Running the app" in \code{\link[=spigot_app]{spigot_app()}}).
-\code{partials} follow the same rule.
+either in the template itself or in a partial it uses. Shiny's scripts go
+just before it. A string containing \code{<}, \verb{\{\{} or a line break is the
+template text; any other string names a file holding it, read as UTF-8
+when \code{\link[=spigot_app]{spigot_app()}} builds the app. The file is looked up on the app's
+\code{templates} search path, then relative to its \code{root}, which is the
+working directory when \code{spigot_app()} is called (the app's directory when
+the app directory is run with \code{\link[shiny:runApp]{shiny::runApp()}}; see "Running the app" in
+\code{\link[=spigot_app]{spigot_app()}}). File names in \code{partials} are looked up the same way.
 
 The template sees only \code{data}, never R variables. \code{{{name}}} inserts a
 value with HTML escaped and \code{{{{name}}}} inserts it as raw HTML; neither
 is ever evaluated as R. Escaping covers \code{&}, \code{<}, \code{>} and \verb{"} but not
-\verb{'}, so put values in double-quoted attributes (\code{value="{{name}}"}). \verb{\{\{> name\}\}} inserts \code{partials$name}, and a
-partial that is not in \code{partials} is an error when the page is created.
+\verb{'}, so put values in double-quoted attributes (\code{value="{{name}}"}).
+\verb{\{\{> name\}\}} inserts the partial \code{name}: from \code{partials}, or else from
+\code{spigot_app()}'s \code{partials}. A partial the page uses that neither has is
+an error when the app is built.
 }
 
 \section{Relative URLs}{

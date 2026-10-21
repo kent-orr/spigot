@@ -8,19 +8,22 @@
 #'
 #' @section Templates:
 #' The template must be a full document with a `</head>` tag (in any case),
-#' either in the template itself or in a partial. Shiny's scripts go just
-#' before it. A string containing `<`, `{{` or a line break is the template
-#' text; any other string is the path of a file holding it, read as UTF-8
-#' when `spigot_page()` is called. A relative path is relative to the working
-#' directory then, which is the app's directory when the app directory is run
-#' with [shiny::runApp()] (see "Running the app" in [spigot_app()]).
-#' `partials` follow the same rule.
+#' either in the template itself or in a partial it uses. Shiny's scripts go
+#' just before it. A string containing `<`, `{{` or a line break is the
+#' template text; any other string names a file holding it, read as UTF-8
+#' when [spigot_app()] builds the app. The file is looked up on the app's
+#' `templates` search path, then relative to its `root`, which is the
+#' working directory when `spigot_app()` is called (the app's directory when
+#' the app directory is run with [shiny::runApp()]; see "Running the app" in
+#' [spigot_app()]). File names in `partials` are looked up the same way.
 #'
 #' The template sees only `data`, never R variables. `{{name}}` inserts a
 #' value with HTML escaped and `{{{name}}}` inserts it as raw HTML; neither
 #' is ever evaluated as R. Escaping covers `&`, `<`, `>` and `"` but not
-#' `'`, so put values in double-quoted attributes (`value="{{name}}"`). `{{> name}}` inserts `partials$name`, and a
-#' partial that is not in `partials` is an error when the page is created.
+#' `'`, so put values in double-quoted attributes (`value="{{name}}"`).
+#' `{{> name}}` inserts the partial `name`: from `partials`, or else from
+#' `spigot_app()`'s `partials`. A partial the page uses that neither has is
+#' an error when the app is built.
 #'
 #' @section Relative URLs:
 #' Relative URLs in every page resolve from the app's root: `href="about"`,
@@ -42,7 +45,8 @@
 #' @param data A named list of values for the template, or a function that
 #'   returns one. A function is called for every request, with the request
 #'   (the Rook environment) if it takes an argument.
-#' @param partials A named list of partial templates: text or file paths.
+#' @param partials A named list of partial templates: text or file names.
+#'   They win over the app's partials of the same name.
 #' @param cache If `TRUE`, the page is rendered on its first request and that
 #'   result is served from then on. Needs static `data`.
 #' @return An object of class `spigot_page`, for the `pages` argument of
@@ -63,19 +67,31 @@ spigot_page <- function(template, data = list(), partials = list(), cache = FALS
   if (!is_string(template)) {
     stop("`template` must be a single string: template text or a file path.", call. = FALSE)
   }
-  label <- template_label(template)
-  template <- read_template(template, "template")
   partials <- check_partials(partials)
   check_data(data)
   if (!is_flag(cache)) stop("`cache` must be TRUE or FALSE.", call. = FALSE)
   if (cache && is.function(data)) {
     stop("`cache = TRUE` needs a list for `data`: cache requires static data.", call. = FALSE)
   }
+  structure(list(label = template_label(template), template = template, data = data,
+                 partials = partials, cache = cache, render = NULL),
+            class = "spigot_page")
+}
+
+# A copy of `page` that can render: its template and partial files read with
+# `loader`, the app's `partials` added to its own, and the checks run. Called
+# by spigot_app() for each page, so one page object can serve several apps.
+resolve_page <- function(page, loader = template_loader(NULL, getwd()), partials = list()) {
+  label <- page$label
+  data <- page$data
+  cache <- page$cache
+  template <- read_template(page$template, "template", loader)
+  partials <- merge_partials(partials, read_partials(page$partials, loader))
+  partials <- partials[check_partial_refs(template, partials)]
   if (!any(has_head_end(c(template, unlist(partials))))) {
     stop("The template ", label, " has no </head>; spigot needs a full HTML ",
          "document to add Shiny's scripts to.", call. = FALSE)
   }
-  check_partial_refs(c(list(template = template), partials), names(partials))
 
   render_html <- function(req) {
     values <- if (is.function(data)) call_with_req(data, req) else data
@@ -92,18 +108,18 @@ spigot_page <- function(template, data = list(), partials = list(), cache = FALS
     html <- if (!cache) render_html(req) else cached %||% (cached <<- render_html(req))
     as_html_document(html, label, base)
   }
-
-  structure(list(label = label, data = data, partials = names(partials), cache = cache,
-                 render = render),
-            class = "spigot_page")
+  page$render <- render
+  page
 }
 
 #' @export
 print.spigot_page <- function(x, ...) {
-  cat("<spigot_page> ", x$label, "\n", sep = "")
+  cat("<spigot_page> ", x$label, if (is.null(x$render)) " (unresolved)", "\n", sep = "")
   cat("  data:     ", if (is.function(x$data)) "function, per request" else "static", "\n",
       sep = "")
-  if (length(x$partials)) cat("  partials: ", paste(x$partials, collapse = ", "), "\n", sep = "")
+  if (length(x$partials)) {
+    cat("  partials: ", paste(names(x$partials), collapse = ", "), "\n", sep = "")
+  }
   cat("  cache:    ", if (x$cache) "yes" else "no", "\n", sep = "")
   invisible(x)
 }
@@ -118,15 +134,9 @@ template_label <- function(x) {
   sprintf("\"%s\"", if (nchar(x) > 40) paste0(substr(x, 1, 37), "...") else x)
 }
 
-# Template text as given, or the contents of the file it names.
-read_template <- function(x, what) {
-  if (looks_like_text(x)) return(enc2utf8(x))
-  if (!file.exists(x) || dir.exists(x)) {
-    stop("Can't find the ", what, " file \"", x, "\" (relative to ", getwd(), "). ",
-         "Template text must contain '<', '{{' or a line break.", call. = FALSE)
-  }
-  lines <- readLines(x, encoding = "UTF-8", warn = FALSE)
-  enc2utf8(paste(lines, collapse = "\n"))
+# Template text as given, or the contents of the file `loader` finds for it.
+read_template <- function(x, what, loader) {
+  if (looks_like_text(x)) enc2utf8(x) else loader(x, what)
 }
 
 check_partials <- function(partials) {
@@ -138,7 +148,6 @@ check_partials <- function(partials) {
       stop("`partials$", nm, "` must be a single string: template text or a file path.",
            call. = FALSE)
     }
-    partials[[nm]] <- read_template(partials[[nm]], paste0("partial \"", nm, "\""))
   }
   partials
 }
@@ -154,20 +163,32 @@ check_data <- function(data) {
 
 has_head_end <- function(x) grepl("</head\\s*>", x, ignore.case = TRUE)
 
-# Partials named in `{{> name}}` tags must be supplied. (A tag after a
-# delimiter change is not seen here; DECISIONS, M10.)
-check_partial_refs <- function(texts, available) {
-  for (where in names(texts)) {
-    m <- regmatches(texts[[where]], gregexpr("\\{\\{\\s*>\\s*([^}[:space:]]+)\\s*\\}\\}",
-                                             texts[[where]]))[[1]]
-    used <- unique(gsub("^\\{\\{\\s*>\\s*|\\s*\\}\\}$", "", m))
-    missing <- setdiff(used, available)
+# Partials named in `{{> name}}` tags, in the template or in a partial it
+# uses, must be supplied. Returns the names of the partials the template
+# uses, directly or not. (A tag after a delimiter change is not seen here;
+# DECISIONS, M10.)
+check_partial_refs <- function(template, partials) {
+  todo <- list(template = template)
+  seen <- character()
+  while (length(todo)) {
+    where <- names(todo)[1]
+    used <- partial_refs(todo[[1]])
+    todo <- todo[-1]
+    missing <- setdiff(used, names(partials))
     if (length(missing)) {
       stop("The ", if (where == "template") "template" else paste0("partial \"", where, "\""),
            " uses the partial \"", missing[1], "\", which is not in `partials`.", call. = FALSE)
     }
+    new <- setdiff(used, seen)
+    seen <- c(seen, new)
+    todo <- c(todo, partials[new])
   }
-  invisible()
+  seen
+}
+
+partial_refs <- function(text) {
+  m <- regmatches(text, gregexpr("\\{\\{\\s*>\\s*([^}[:space:]]+)\\s*\\}\\}", text))[[1]]
+  unique(gsub("^\\{\\{\\s*>\\s*|\\s*\\}\\}$", "", m))
 }
 
 # The one place whisker runs.
@@ -277,7 +298,10 @@ page_router <- function(pages) {
 }
 
 render_page <- function(page, req, base = NULL) {
-  if (inherits(page, "spigot_page")) return(page$render(req, base))
+  if (inherits(page, "spigot_page")) {
+    if (is.null(page$render)) stop("The page ", page$label, " was not resolved.", call. = FALSE)
+    return(page$render(req, base))
+  }
   if (is.function(page)) call_with_req(page, req) else page
 }
 

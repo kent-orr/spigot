@@ -623,3 +623,35 @@ promises 1.5.0, future 1.70.0, chromote 0.5.1, Chrome for Testing
   those paths before R. `spigot_app()` checks pages before `root` and `static`, so an app
   sourced from the wrong directory still reports the missing template first.
 - `static = NULL` (the default) sets exactly the paths 0.1.1 set: only the exclusion.
+
+## 2026-10-21 — M15: template search path, partial dirs, pages resolved at build
+
+- **Every `spigot_page()` is resolved when `spigot_app()` builds the app**, by
+  `resolve_page(page, loader, partials)`: template and partial files are read, the app's
+  partials merged in (the page's win), the `</head>` and partial-reference checks run, and
+  `render` built. `spigot_page()` only validates its arguments and records them; `print()`
+  says "(unresolved)". PLAN M15 kept text templates rendering at creation. Not done: the
+  app's `partials` must reach every page, and a text template using `{{> nav}}` from them
+  cannot pass the partial check on its own. One rule instead of two. The errors and their
+  messages are the same, and still come before the app runs, from `spigot_app()` instead
+  of `spigot_page()`. `resolve_page()` returns a copy, so one page object can serve two
+  apps (or, in M16, two blueprints) with different search paths.
+- **`as_pages()` stays validation only**; `spigot_app()` resolves the pages after it
+  (PLAN said from `as_pages()`). `as_pages(p)` still returns `p` itself.
+- **Only the partials a page uses are checked**, following `{{> }}` tags from the template
+  through the partials it reaches. In 0.1.1 every partial given to a page was checked, and
+  any of them could supply `</head>`. With app-wide partials, one meant for other pages may
+  use partials this page lacks, or hold the `</head>` this page does not use. The render-time
+  `</head>` check stays.
+- **Lookup order** for a file name: each `templates` entry in order (a directory holding
+  the name, or a file whose basename is the name), then the name relative to `root` (the
+  0.1.1 rule, with `root = "."` the working directory at `spigot_app()`). Absolute names are
+  read as given. Every `templates` entry must exist. The miss error keeps 0.1.1's text and
+  lists every place it looked in place of "(relative to <wd>)". Page partial file names use
+  the same lookup.
+- **App `partials`:** `NULL`, a directory (one partial per regular file, named by the file
+  name without its last extension; hidden files and subdirectories skipped; two files with
+  one name are an error), or a named list exactly like `spigot_page()`'s. PLAN's "a list may
+  mix dirs and strings only at the top level" is read as: an unnamed element, such as
+  `list("dir")`, is an error, because a list holds partials, not directories.
+- `templates = "templates"` is not a default (PLAN M15 step 6).

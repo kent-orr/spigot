@@ -97,11 +97,19 @@
 #'   `options(shiny.maxRequestSize)` while the app runs (it also limits
 #'   [shiny::fileInput()] uploads). `Inf` removes the limit. `NULL` leaves the
 #'   option as it is.
+#' @param templates Where [spigot_page()] template files are looked up, in
+#'   order: directories, or files matched by their name. A name not found
+#'   there is a path relative to `root`. `NULL` looks only there.
+#' @param partials Partials every page can use: a directory, holding one
+#'   partial per file named by the file name without its extension
+#'   (`nav.html` is `{{> nav}}`), or a named list like [spigot_page()]'s. A
+#'   page's own partials win over these.
 #' @param static Directories of files to serve as they are: one directory,
 #'   served at `/static`, or a named list of them, served at `/<name>` each.
 #'   `NULL` serves none. See the Files section.
-#' @param root The directory that relative `static` paths are relative to.
-#'   A relative `root` is relative to the working directory when
+#' @param root The directory that relative `templates`, `partials` and
+#'   `static` paths, and template file names not on the search path, are
+#'   relative to. A relative `root` is relative to the working directory when
 #'   `spigot_app()` is called.
 #' @return A `shiny.appobj`.
 #' @export
@@ -113,11 +121,16 @@
 #' }
 spigot_app <- function(pages, server = NULL, api, prefix = "/api",
                        require_session = TRUE, max_request_size = NULL,
-                       static = NULL, root = ".") {
+                       templates = NULL, partials = NULL, static = NULL, root = ".") {
   prefix <- check_prefix(prefix)
   pages <- as_pages(pages)
   check_pages_vs_prefix(names(pages), prefix)
   root <- resolve_root(root)
+  loader <- template_loader(templates, root)
+  partials <- app_partials(partials, root, loader)
+  pages[] <- lapply(pages, function(page) {
+    if (inherits(page, "spigot_page")) resolve_page(page, loader, partials) else page
+  })
   static <- check_static(static, root, prefix)
   for (path in names(static)) check_pages_vs_prefix(names(pages), path, "static path")
   guard <- request_guard(require_session)

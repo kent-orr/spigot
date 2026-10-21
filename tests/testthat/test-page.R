@@ -1,6 +1,8 @@
 doc <- "<html><head><title>{{title}}</title></head><body>{{#items}}<li>{{.}}</li>{{/items}}{{> foot}}</body></html>"
 
-page_html <- function(page, req = fake_req()) as.character(page$render(req))
+# Pages are resolved (template files read, checks run) when the app is built;
+# these unit tests resolve them with the defaults, as spigot_app() would.
+page_html <- function(page, req = fake_req()) as.character(resolve_page(page)$render(req))
 
 # ---- spigot_page(): rendering --------------------------------------------------
 
@@ -8,7 +10,7 @@ test_that("spigot_page() renders data and partials into an html_document", {
   p <- spigot_page(doc, data = list(title = "T", items = 1:2),
                    partials = list(foot = "<p>f</p>"))
   expect_s3_class(p, "spigot_page")
-  out <- p$render(fake_req())
+  out <- resolve_page(p)$render(fake_req())
   expect_s3_class(out, "html_document")
   html <- as.character(out)
   expect_match(html, "<title>T</title>", fixed = TRUE)
@@ -39,11 +41,11 @@ test_that("the template and partials can be files; non-ASCII round-trips", {
   expect_match(page_html(p), enc2utf8("Größe ✓"), fixed = TRUE)
 })
 
-test_that("relative template paths are read from the working directory at creation", {
+test_that("template files are read when the page is resolved, not at creation", {
   dir <- withr::local_tempdir()
+  p <- spigot_page("p.html") # no file yet, and no error
   writeLines("<html><head></head><body>from file</body></html>", file.path(dir, "p.html"))
-  p <- withr::with_dir(dir, spigot_page("p.html"))
-  expect_match(page_html(p), "from file", fixed = TRUE)
+  expect_match(withr::with_dir(dir, page_html(p)), "from file", fixed = TRUE)
 })
 
 test_that("data is never evaluated as R, whatever the braces", {
@@ -71,11 +73,11 @@ test_that("templates see only `data`, not R variables", {
 # ---- spigot_page(): </head> ------------------------------------------------------
 
 test_that("a template without </head> is an error naming the template", {
-  expect_error(spigot_page("<html><body>no head</body></html>"),
+  expect_error(resolve_page(spigot_page("<html><body>no head</body></html>")),
                "<html><body>no head.*</head>")
   f <- withr::local_tempfile(fileext = ".html")
   writeLines("<html><body>x</body></html>", f)
-  expect_error(spigot_page(f), basename(f), fixed = TRUE)
+  expect_error(resolve_page(spigot_page(f)), basename(f), fixed = TRUE)
 })
 
 test_that("</head> is matched case-insensitively and may come from a partial", {
@@ -91,7 +93,7 @@ test_that("</head> is matched case-insensitively and may come from a partial", {
 test_that("a render whose output has no </head> is an error", {
   p <- spigot_page("<html>{{#show}}<head></head>{{/show}}<body>b</body></html>",
                    data = function(req) list(show = FALSE))
-  expect_error(p$render(fake_req()), "</head>")
+  expect_error(resolve_page(p)$render(fake_req()), "</head>")
 })
 
 # ---- spigot_page(): data and cache ------------------------------------------------
@@ -109,7 +111,7 @@ test_that("data can be a function of the request, evaluated per request", {
 
 test_that("a data function must return a list", {
   p <- spigot_page("<html><head></head><body></body></html>", data = function(req) "x")
-  expect_error(p$render(fake_req()), "list")
+  expect_error(resolve_page(p)$render(fake_req()), "list")
 })
 
 test_that("cache = TRUE renders once; cache = FALSE renders every request", {
@@ -119,14 +121,15 @@ test_that("cache = TRUE renders once; cache = FALSE renders every request", {
     calls <<- calls + 1L
     real(...)
   })
-  p <- spigot_page("<html><head></head><body>{{x}}</body></html>", data = list(x = 1),
-                   cache = TRUE)
+  p <- resolve_page(spigot_page("<html><head></head><body>{{x}}</body></html>",
+                                data = list(x = 1), cache = TRUE))
   a <- p$render(fake_req())
   b <- p$render(fake_req())
   expect_identical(calls, 1L)
   expect_identical(a, b)
 
-  p <- spigot_page("<html><head></head><body>{{x}}</body></html>", data = list(x = 1))
+  p <- resolve_page(spigot_page("<html><head></head><body>{{x}}</body></html>",
+                                data = list(x = 1)))
   p$render(fake_req())
   p$render(fake_req())
   expect_identical(calls, 3L)
@@ -140,11 +143,11 @@ test_that("cache = TRUE requires static data", {
 
 # ---- spigot_page(): partials and validation ----------------------------------------
 
-test_that("a partial the template uses but nobody supplied is an error at creation", {
-  expect_error(spigot_page("<html><head></head><body>{{> nav}}</body></html>"),
+test_that("a partial the template uses but nobody supplied is an error when resolved", {
+  expect_error(resolve_page(spigot_page("<html><head></head><body>{{> nav}}</body></html>")),
                "nav")
-  expect_error(spigot_page("<html><head></head><body>{{>a}}</body></html>",
-                           partials = list(a = "{{> b}}")),
+  expect_error(resolve_page(spigot_page("<html><head></head><body>{{>a}}</body></html>",
+                                        partials = list(a = "{{> b}}"))),
                "\"b\"")
 })
 
@@ -152,7 +155,7 @@ test_that("spigot_page() validates its arguments", {
   expect_error(spigot_page(1), "template")
   expect_error(spigot_page(c("<a>", "<b>")), "template")
   expect_error(spigot_page(NA_character_), "template")
-  expect_error(spigot_page("no-such-file.html"), "no-such-file.html")
+  expect_error(resolve_page(spigot_page("no-such-file.html")), "no-such-file.html")
   ok <- "<html><head></head><body></body></html>"
   expect_error(spigot_page(ok, data = "x"), "data")
   expect_error(spigot_page(ok, data = list(1, 2)), "data")
@@ -165,14 +168,18 @@ test_that("spigot_page() prints a summary", {
   p <- spigot_page("<html><head></head><body></body></html>", cache = TRUE)
   expect_output(print(p), "spigot_page")
   expect_output(print(p), "cache")
+  expect_output(print(p), "unresolved")
+  expect_no_match(capture.output(print(resolve_page(p)))[1], "unresolved")
 })
 
 # ---- page_router() ----------------------------------------------------------------
 
 two_pages <- function() {
   list(
-    "/" = spigot_page("<html><head><title>home</title></head><body></body></html>"),
-    "/about" = spigot_page("<html><head><title>about</title></head><body></body></html>")
+    "/" = resolve_page(spigot_page("<html><head><title>home</title></head><body></body></html>")),
+    "/about" = resolve_page(
+      spigot_page("<html><head><title>about</title></head><body></body></html>")
+    )
   )
 }
 
@@ -260,7 +267,7 @@ test_that("a nested page must be a spigot_page()", {
 nested_doc <- "<!DOCTYPE html><html><head lang=\"en\"><title>n</title></head><body></body></html>"
 
 test_that("a nested page gets a <base> to the app root, first in <head>", {
-  p <- spigot_page(nested_doc)
+  p <- resolve_page(spigot_page(nested_doc))
   route <- page_router(list("/" = p, "/docs/intro" = p, "/a/b/c" = p))
   expect_no_match(as.character(route(fake_req("GET", "/"))), "<base", fixed = TRUE)
   expect_match(as.character(route(fake_req("GET", "/docs/intro"))),
@@ -270,7 +277,7 @@ test_that("a nested page gets a <base> to the app root, first in <head>", {
 })
 
 test_that("a cached page gets the right <base> at every path", {
-  p <- spigot_page(nested_doc, cache = TRUE)
+  p <- resolve_page(spigot_page(nested_doc, cache = TRUE))
   route <- page_router(list("/" = p, "/docs/intro" = p))
   for (i in 1:2) {
     expect_no_match(as.character(route(fake_req("GET", "/"))), "<base", fixed = TRUE)
@@ -280,21 +287,21 @@ test_that("a cached page gets the right <base> at every path", {
 })
 
 test_that("a nested page with its own <base> keeps it", {
-  p <- spigot_page("<html><HEAD><BASE href=\"/x/\"></HEAD><body></body></html>")
+  p <- resolve_page(spigot_page("<html><HEAD><BASE href=\"/x/\"></HEAD><body></body></html>"))
   html <- as.character(page_router(list("/docs/intro" = p))(fake_req("GET", "/docs/intro")))
   expect_no_match(html, "data-spigot", fixed = TRUE)
   expect_match(html, "<BASE href=\"/x/\">", fixed = TRUE)
 })
 
 test_that("a nested page without a <head> tag is an error", {
-  p <- spigot_page("<html><title>t</title></head><body></body></html>")
+  p <- resolve_page(spigot_page("<html><title>t</title></head><body></body></html>"))
   route <- page_router(list("/" = p, "/docs/intro" = p))
   expect_match(as.character(route(fake_req("GET", "/"))), "<title>t</title>", fixed = TRUE)
   expect_error(route(fake_req("GET", "/docs/intro")), "<head>")
 })
 
 test_that("nested paths route, redirect and 404 like top-level ones", {
-  p <- spigot_page(nested_doc)
+  p <- resolve_page(spigot_page(nested_doc))
   route <- page_router(list("/docs/intro" = p))
   r <- route(fake_req("GET", "/docs/intro/", query = "q=1"))
   expect_identical(r$status, 301L)
@@ -302,6 +309,77 @@ test_that("nested paths route, redirect and 404 like top-level ones", {
   for (path in c("/docs", "/docs/", "/docs/nope", "/docs/intro/x", "/docs/nope/")) {
     expect_identical(route(fake_req("GET", path))$status, 404L, info = path)
   }
+})
+
+# ---- spigot_app(): templates and partials ------------------------------------------
+
+# The HTML spigot_app() serves at `path`, without starting a server.
+app_html <- function(app, path = "/") resp_text(app$httpHandler(fake_req("GET", path)))
+
+test_that("a missing template file is an error when the app is built, naming where it looked", {
+  root <- local_tree(c("templates/other.html" = "x"))
+  p <- spigot_page("missing.html") # not an error yet
+  err <- expect_error(spigot_app(pages = p, api = test_router(), templates = "templates",
+                                 root = root),
+                      "Can't find the template file \"missing.html\"")
+  expect_match(conditionMessage(err), file.path(root, "templates"), fixed = TRUE)
+  expect_error(spigot_app(pages = p, api = test_router(), root = root), root, fixed = TRUE)
+})
+
+test_that("pages find templates on the search path and partials in the app's dir", {
+  root <- local_tree(c(
+    "templates/index.html" = "<html><head></head><body>{{> nav}}{{> foot}}</body></html>",
+    "templates/alt-nav.html" = "<nav>alt nav</nav>",
+    "partials/nav.html" = "<nav>app nav</nav>",
+    "partials/foot.html" = "<p>app foot</p>"
+  ))
+  app <- spigot_app(
+    pages = list(
+      "/" = spigot_page("index.html"),
+      "/own" = spigot_page("index.html", partials = list(nav = "<nav>page nav</nav>")),
+      "/file" = spigot_page("index.html", partials = list(nav = "alt-nav.html")),
+      "/text" = spigot_page("<html><head></head><body>{{> foot}}</body></html>")
+    ),
+    api = test_router(), templates = "templates", partials = "partials", root = root
+  )
+  expect_match(app_html(app, "/"), "<nav>app nav</nav><p>app foot</p>", fixed = TRUE)
+  expect_match(app_html(app, "/own"), "<nav>page nav</nav><p>app foot</p>", fixed = TRUE)
+  expect_match(app_html(app, "/file"), "<nav>alt nav</nav><p>app foot</p>", fixed = TRUE)
+  expect_match(app_html(app, "/text"), "<body><p>app foot</p>", fixed = TRUE)
+})
+
+test_that("app partials can be a named list, and are checked against the pages", {
+  root <- local_tree(c("foot.html" = "<p>file foot</p>"))
+  page <- spigot_page("<html><head></head><body>{{> foot}}{{> nav}}</body></html>")
+  app <- spigot_app(pages = page, api = test_router(), root = root,
+                    partials = list(foot = "foot.html", nav = "<nav>n</nav>"))
+  expect_match(app_html(app), "<p>file foot</p>\n?<nav>n</nav>", perl = TRUE)
+  expect_error(spigot_app(pages = page, api = test_router(), root = root,
+                          partials = list(foot = "foot.html")),
+               "uses the partial \"nav\", which is not in `partials`")
+})
+
+test_that("only the partials a page uses are checked", {
+  # An app's partials are shared by every page; one meant for other pages may
+  # use partials this page does not have, or hold the </head> this one lacks.
+  app <- list(other = "{{> elsewhere}}", head = "<head></head>")
+  p <- spigot_page("<html><head></head><body>ok</body></html>")
+  expect_match(page_html(resolve_page(p, partials = app)), "ok", fixed = TRUE)
+  expect_error(resolve_page(spigot_page("<html><body>{{> other}}</body></html>"),
+                            partials = app),
+               "partial \"other\" uses the partial \"elsewhere\"")
+  expect_error(resolve_page(spigot_page("<html><body>no head</body></html>"), partials = app),
+               "has no </head>")
+})
+
+test_that("one page object can be resolved by two apps with different templates", {
+  root <- local_tree(c("a/p.html" = "<html><head></head><body>from a</body></html>",
+                       "b/p.html" = "<html><head></head><body>from b</body></html>"))
+  p <- spigot_page("p.html")
+  a <- spigot_app(pages = p, api = test_router(), templates = "a", root = root)
+  b <- spigot_app(pages = p, api = test_router(), templates = "b", root = root)
+  expect_match(app_html(a), "from a", fixed = TRUE)
+  expect_match(app_html(b), "from b", fixed = TRUE)
 })
 
 # ---- integration ---------------------------------------------------------------------
