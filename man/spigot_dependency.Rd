@@ -7,7 +7,8 @@
 spigot_dependency(prefix = "/api")
 }
 \arguments{
-\item{prefix}{The API prefix, as given to \code{\link[=spigot_app]{spigot_app()}}.}
+\item{prefix}{The API prefix, as given to \code{\link[=spigot_app]{spigot_app()}}. The script tag
+carries it as \code{data-prefix}, which is where spigot.js reads it from.}
 }
 \value{
 An \code{\link[htmltools:htmlDependency]{htmltools::htmlDependency()}}.
@@ -17,35 +18,11 @@ An \code{\link[htmltools:htmlDependency]{htmltools::htmlDependency()}}.
 else. Use it directly only for a page that \code{spigot_app()} does not serve.
 }
 \details{
-The script defines \code{window.spigot}:
-\itemize{
-\item \code{spigot.ready}: a promise that resolves with the session token once the
-Shiny session has started. Calls made earlier wait for it.
-\item \code{spigot.get(path, query, options)}, \code{spigot.del(path, query, options)},
-\code{spigot.post(path, body, options)}, \code{spigot.put(path, body, options)}, and
-\code{spigot.request(method, path, options)} with \code{options} \code{query}, \code{body},
-\code{headers} and \code{timeout} (milliseconds). They resolve with the parsed JSON
-reply (text if the reply is not JSON, \code{null} if it is empty).
-\item \code{spigot.SpigotError}: what they reject with, for a non-2xx reply or when
-no reply arrives. It has \code{status} (\code{0} for a timeout or network failure),
-\code{message} (the reply's JSON \code{error} field when there is one) and \code{body}.
-\item \code{spigot.on(event, fn)}: calls \code{fn(data, event)} for each event that R
-pushes with \code{\link[=spigot_emit]{spigot_emit()}} or \code{\link[=spigot_broadcast]{spigot_broadcast()}}. Returns a function
-that removes the listener. \code{spigot.off(event, fn)} removes \code{fn};
-\code{spigot.off(event)} removes every listener of \code{event}. A listener that
-throws does not stop the others; its error is still reported.
-}
-
-On a page below the top level, which \code{\link[=spigot_app]{spigot_app()}} gives a
-\verb{<base href>}, the script also keeps plain clicks on \code{href="#section"}
-links on the page (see \code{\link[=spigot_page]{spigot_page()}}).
-
-Paths are relative to the API, so \code{spigot.get("items")} and
-\code{spigot.get("/items")} both request \code{api/items} relative to the page. This
-keeps working when the app is served under a subpath. Every request carries
-the tab's session token in the \code{X-Spigot-Session} header. \code{FormData},
-\code{Blob}, \code{URLSearchParams} and \code{ArrayBuffer} bodies are sent unchanged; any
-other body, strings included, is sent as JSON.
+The script defines \code{window.spigot}: \code{spigot.get()}, \code{spigot.post()} and
+the other request functions call the API with the tab's session and
+resolve with the parsed reply or reject with a \code{spigot.SpigotError};
+\code{spigot.on()} listens for events pushed with \code{\link[=spigot_emit]{spigot_emit()}}. See
+\code{vignette("client", package = "spigot")}.
 }
 \examples{
 spigot_dependency()

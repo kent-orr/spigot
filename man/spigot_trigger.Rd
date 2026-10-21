@@ -26,21 +26,12 @@ builds. Most endpoints do not need it: return the data, or push it with
 \code{\link[=spigot_emit]{spigot_emit()}}.
 }
 \details{
-The input is set the normal Shiny way: spigot asks the page, and the page
-calls \code{Shiny.setInputValue()} with \code{priority: "event"}. So the observers
-run in a regular reactive flush, and every trigger fires them, even with
-the same value as the last one. It takes one extra trip over the
-websocket, about as long as any input change takes Shiny.
-
-\code{value} itself never leaves R: the page sends back only an id, and
-\code{input[[name]]} is \code{identical()} to \code{value}. Data frames, factors, dates,
-\code{NA} and objects JSON cannot hold arrive unchanged. The value is kept in
-the session until the page sends the id back (or the session ends).
-
-Because the page sets the input, the trigger reaches the observers \emph{after}
-the endpoint has returned, and only if the page is open and loaded
-spigot.js (every spigot page does). Called with a module's \code{session},
-\code{name} is namespaced like the module's own inputs.
+\code{value} itself never leaves R: \code{input[[name]]} is \code{identical()} to
+\code{value}, so data frames, factors, dates, \code{NA} and objects JSON cannot hold
+arrive unchanged. Every trigger fires the observers, even with the same
+value as the last one. Called with a module's \code{session}, \code{name} is
+namespaced like the module's own inputs. See
+\code{vignette("reactivity", package = "spigot")} for how and when it runs.
 }
 \examples{
 \dontrun{

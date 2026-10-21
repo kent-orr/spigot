@@ -126,12 +126,7 @@ event_message <- function(event, data) {
 #'
 #' Events go over the tab's Shiny websocket as soon as they are emitted. An
 #' event emitted by an endpoint can reach the page *before* the endpoint's
-#' HTTP response does. Events sent before the page has called `spigot.on()`
-#' for them are dropped.
-#'
-#' Call these from the app's own R process (an endpoint, an observer, a
-#' [later::later()] callback). A `future` worker is another process and has no
-#' sessions; emit from the promise's `then()` instead.
+#' HTTP response does. See `vignette("reactivity", package = "spigot")`.
 #'
 #' @param session A Shiny session, or `NULL`.
 #' @param event Event name, a non-empty string such as `"cart:changed"`.
@@ -243,21 +238,12 @@ is_session <- function(x) {
 #' builds. Most endpoints do not need it: return the data, or push it with
 #' [spigot_emit()].
 #'
-#' The input is set the normal Shiny way: spigot asks the page, and the page
-#' calls `Shiny.setInputValue()` with `priority: "event"`. So the observers
-#' run in a regular reactive flush, and every trigger fires them, even with
-#' the same value as the last one. It takes one extra trip over the
-#' websocket, about as long as any input change takes Shiny.
-#'
-#' `value` itself never leaves R: the page sends back only an id, and
-#' `input[[name]]` is `identical()` to `value`. Data frames, factors, dates,
-#' `NA` and objects JSON cannot hold arrive unchanged. The value is kept in
-#' the session until the page sends the id back (or the session ends).
-#'
-#' Because the page sets the input, the trigger reaches the observers *after*
-#' the endpoint has returned, and only if the page is open and loaded
-#' spigot.js (every spigot page does). Called with a module's `session`,
-#' `name` is namespaced like the module's own inputs.
+#' `value` itself never leaves R: `input[[name]]` is `identical()` to
+#' `value`, so data frames, factors, dates, `NA` and objects JSON cannot hold
+#' arrive unchanged. Every trigger fires the observers, even with the same
+#' value as the last one. Called with a module's `session`, `name` is
+#' namespaced like the module's own inputs. See
+#' `vignette("reactivity", package = "spigot")` for how and when it runs.
 #'
 #' @param session The Shiny session from [spigot_session()], or a server
 #'   function's `session`.

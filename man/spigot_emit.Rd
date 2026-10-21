@@ -45,12 +45,7 @@ become arrays of row objects.
 
 Events go over the tab's Shiny websocket as soon as they are emitted. An
 event emitted by an endpoint can reach the page \emph{before} the endpoint's
-HTTP response does. Events sent before the page has called \code{spigot.on()}
-for them are dropped.
-
-Call these from the app's own R process (an endpoint, an observer, a
-\code{\link[later:later]{later::later()}} callback). A \code{future} worker is another process and has no
-sessions; emit from the promise's \code{then()} instead.
+HTTP response does. See \code{vignette("reactivity", package = "spigot")}.
 }
 \examples{
 \dontrun{

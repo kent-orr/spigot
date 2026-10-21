@@ -9,7 +9,8 @@ vignette: >
 
 `spigot_app()` adds `spigot.js` to every page it serves, after jQuery and Shiny's own
 script. It defines `window.spigot`. It is plain JavaScript with no build step, and needs only
-what every current browser has: `fetch`, `Promise`, `URL` and `AbortController`.
+what every current browser has: `fetch`, `Promise`, `URL`, `AbortController` and
+`ReadableStream`.
 
 For a page that `spigot_app()` does not serve, such as a `shiny::fluidPage()` in a classic
 Shiny app, attach `spigot_dependency()` to it.
