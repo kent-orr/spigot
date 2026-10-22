@@ -336,31 +336,37 @@ on another origin get a `403`.
 
 `site` is a small site about R’s `mtcars` data with three pages: a home
 page, a table of the cars, and a page that fits a regression. It shows
-templates with data, shared partials, and an endpoint whose work runs in
-another R process.
+templates with data, shared partials, blueprints, and an endpoint whose
+work runs in another R process.
 
     site/
     ├── app.R
     ├── api.R
-    ├── pages/      # one template per page
+    ├── R/                  # loaded by Shiny before app.R
+    │   ├── data.R          # the data, and a page() helper
+    │   ├── pages-cars.R    # the cars blueprint
+    │   └── pages-model.R   # the model blueprint
+    ├── templates/
     │   ├── index.html
-    │   ├── cars.html
-    │   └── model.html
-    ├── partials/   # shared by every page
-    │   ├── head.html
-    │   ├── nav.html
-    │   └── footer.html
-    └── www/
+    │   ├── partials/       # shared by every page
+    │   │   ├── head.html
+    │   │   ├── nav.html
+    │   │   └── footer.html
+    │   ├── cars/cars.html
+    │   └── model/model.html
+    └── static/
         ├── site.css
-        ├── cars.js
-        └── model.js
+        ├── cars/cars.js
+        └── model/model.js
 
 ``` r
 
 # spigot "site" example: a small multi-page site about R's mtcars data.
 #
-# * Three pages, each a whisker template in pages/, sharing the partials in
-#   partials/ (the <head>, the nav bar and the footer).
+# * Templates live in templates/, shared partials (the <head>, the nav bar and
+#   the footer) in templates/partials/, and files the pages load in static/.
+# * The /cars and /model sections are blueprints, defined in R/: each has its
+#   own templates and static files. Shiny loads R/ before this file.
 # * The /cars page is rendered in R with every row; its filter form then
 #   calls the API and redraws the table in the browser.
 # * The /model page calls an endpoint that bootstraps a regression in a
@@ -373,51 +379,46 @@ library(spigot)
 future::plan(future::multisession, workers = 2)
 shiny::onStop(function() future::plan(future::sequential))
 
-cars <- data.frame(model = rownames(datasets::mtcars), datasets::mtcars, row.names = NULL)
-predictors <- c(
-  wt = "Weight (1000 lbs)", hp = "Horsepower", disp = "Displacement (cu. in.)",
-  qsec = "Quarter-mile time (s)", drat = "Rear axle ratio"
-)
-
-# A page of the site: its template, the shared partials, and its data. `key`
-# tells the nav partial which link is the current page. The data never
-# changes, so each page is rendered once and cached.
-page <- function(file, key, title, data = list()) {
-  spigot_page(
-    file.path("pages", file),
-    data = c(list(title = title, page = stats::setNames(list(TRUE), key)), data),
-    partials = list(
-      head = "partials/head.html",
-      nav = "partials/nav.html",
-      footer = "partials/footer.html"
-    ),
-    cache = TRUE
-  )
-}
-
 spigot_app(
   pages = list(
     "/" = page("index.html", "home", "Home", list(
-      n = nrow(cars),
+      n = nrow(car_data),
       predictors = length(predictors)
-    )),
-    "/cars" = page("cars.html", "cars", "Cars", list(
-      rows = unname(whisker::rowSplit(cars[c("model", "mpg", "cyl", "hp", "wt")]))
-    )),
-    "/model" = page("model.html", "model", "Model", list(
-      predictors = Map(function(name, label) list(name = name, label = label),
-                       names(predictors), unname(predictors), USE.NAMES = FALSE)
     ))
   ),
-  api = "api.R"
+  blueprints = list("/cars" = cars, "/model" = model),
+  api = "api.R",
+  templates = "templates",
+  partials = "templates/partials",
+  static = "static"
 )
 ```
+
+`templates`, `partials` and `static` say where the files are; the
+`/cars` and `/model` sections are blueprints, each with its own
+templates and static files:
+
+``` r
+
+# The cars section: its page renders every row in R; static/cars/cars.js
+# filters them through the API. Mounted at /cars in app.R.
+cars <- spigot::spigot_blueprint(
+  pages = page("cars.html", "cars", "Cars", list(
+    rows = unname(whisker::rowSplit(car_data[c("model", "mpg", "cyl", "hp", "wt")]))
+  )),
+  templates = "templates/cars",
+  static = "static/cars"
+)
+```
+
+[`vignette("flask-flow", package = "spigot")`](https://kent-orr.github.io/spigot/articles/flask-flow.md)
+explains this layout.
 
 ### Several pages
 
 `pages` is a named list keyed by path. A request for `/cars/` is
-redirected to `/cars`, and a path that is neither a page nor a file in
-`www/` gets a 404 page. Pages can also be nested (`"/docs/intro"`); see
+redirected to `/cars`, and a path that is neither a page nor a static
+file gets a 404 page. Pages can also be nested (`"/docs/intro"`); see
 [`?spigot_page`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
 for how their relative URLs resolve.
 
@@ -458,14 +459,18 @@ with all 32 rows:
     </table>
   </main>
   {{> footer}}
-  <script src="cars.js"></script>
+  <script src="{{static}}/cars.js"></script>
 </body>
 </html>
 ```
 
-All three pages share the `head`, `nav` and `footer` partials. The nav
-marks the current page with `aria-current`, using the `page` value each
-page’s data sets:
+Its script is `<script src="{{static}}/cars.js">`: a blueprint’s pages
+get `{{static}}`, the path its static files are served at
+(`cars/static`).
+
+All three pages share the `head`, `nav` and `footer` partials from
+`templates/partials/`. The nav marks the current page with
+`aria-current`, using the `page` value each page’s data sets:
 
 ``` html
 <nav class="site-nav">
@@ -535,8 +540,9 @@ with
 
 ``` r
 
-# The site's API. `cars` and `predictors` are defined in app.R: spigot_app()
-# evaluates this file in app.R's environment.
+# The site's API. `car_data` and `predictors` are defined in R/data.R, which
+# Shiny loads before app.R; spigot_app() evaluates this file in app.R's
+# environment, which sees them.
 
 #* Cars whose model name contains `q` (ignoring case) and that do at least
 #* `min_mpg` miles per gallon.
@@ -544,9 +550,9 @@ with
 function(q = "", min_mpg = "") {
   min_mpg <- suppressWarnings(as.numeric(min_mpg))
   if (length(min_mpg) != 1 || is.na(min_mpg)) min_mpg <- -Inf
-  keep <- grepl(tolower(q), tolower(cars$model), fixed = TRUE) & cars$mpg >= min_mpg
+  keep <- grepl(tolower(q), tolower(car_data$model), fixed = TRUE) & car_data$mpg >= min_mpg
   # A data frame becomes an array of row objects.
-  list(rows = cars[keep, c("model", "mpg", "cyl", "hp", "wt")])
+  list(rows = car_data[keep, c("model", "mpg", "cyl", "hp", "wt")])
 }
 
 #* Regress mpg on one predictor and bootstrap a 95% interval for the slope.
@@ -565,7 +571,7 @@ function(res, x = "wt", reps = 1000) {
   }
 
   # Only these values are sent to the worker.
-  data <- cars[c("mpg", x)]
+  data <- car_data[c("mpg", x)]
   app_pid <- Sys.getpid()
   promises::future_promise({
     started <- Sys.time()

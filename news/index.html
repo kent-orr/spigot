@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,8 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="../articles/why-spigot.html">Why spigot?</a></li>
     <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="../articles/flask-flow.html">Templates, static files and blueprints</a></li>
+    <li><a class="dropdown-item" href="../articles/blueprints.html">Blueprints</a></li>
     <li><a class="dropdown-item" href="../articles/reactivity.html">Push, reactivity and concurrency</a></li>
     <li><a class="dropdown-item" href="../articles/client.html">The browser client: spigot.js</a></li>
   </ul></li>
@@ -46,6 +48,19 @@
       <small>Source: <a href="https://github.com/kent-orr/spigot/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.0" id="spigot-020">spigot 0.2.0<a class="anchor" aria-label="anchor" href="#spigot-020"></a></h2>
+<ul><li>Blueprints: <code><a href="../reference/spigot_blueprint.html">spigot_blueprint()</a></code> groups a section’s pages, API, templates, partials and static files, and <code>spigot_app(blueprints = list("/cars" = cars))</code> serves its pages under <code>/cars</code>, its API under <code>/api/cars</code> and its static files at <code>/cars/static</code>, which its pages see as <code>{{static}}</code>. <code><a href="../articles/blueprints.html">vignette("blueprints")</a></code> explains them and <code><a href="../articles/flask-flow.html">vignette("flask-flow")</a></code> shows the folder layout.</li>
+<li>
+<code>spigot_app(templates =)</code> is a search path for template files, and <code>spigot_app(partials =)</code> gives every page shared partials: a folder (one partial per file) or a named list. A page’s own partials win.</li>
+<li>
+<code>spigot_app(static =)</code> serves folders at <code>/static</code> (or <code>/&lt;name&gt;</code> each) in every launch mode, not only when the app folder is run, as <code>www/</code> is.</li>
+<li>
+<code>spigot_app(root =)</code> is the folder that these paths, and the <code>api</code> file, are relative to. It defaults to the working directory, as in 0.1.x.</li>
+<li>Template files are now read, and their checks run, when <code><a href="../reference/spigot_app.html">spigot_app()</a></code> builds the app rather than when <code><a href="../reference/spigot_page.html">spigot_page()</a></code> is called. The errors are the same, and a missing file’s error now lists every place spigot looked. Only the partials a page uses are checked.</li>
+<li>The <code>site</code> example is now laid out with <code>templates/</code>, <code>static/</code> and two blueprints. The <code>live</code> example no longer shows a stale tab count when its first reply arrives late.</li>
+<li>No breaking changes: every new argument defaults to 0.1.1 behaviour.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.1.1" id="spigot-011">spigot 0.1.1<a class="anchor" aria-label="anchor" href="#spigot-011"></a></h2>
 <ul><li>Internal simplification; no change to behaviour, except that <code>/reactlog</code> now gets the app’s own 404 instead of Shiny’s reactlog. <code>spigot.js</code> now uses current JavaScript syntax (ES2017) and needs <code>fetch</code>, <code>AbortController</code> and <code>ReadableStream</code>, which every current browser has. A <code>{{&gt; name}}</code> partial missing from <code>partials</code> is caught when the page is created.</li>

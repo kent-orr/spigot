@@ -81,6 +81,8 @@ run_example("site")     # three pages with shared templates, work in a future wo
   : Create a Shiny app with a plumber API mounted inside it
 - [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
   : A page rendered from a whisker template
+- [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+  : A blueprint: pages, an API and files that belong together
 - [`spigot_api()`](https://kent-orr.github.io/spigot/reference/spigot_api.md)
   : Build the API router
 
@@ -113,6 +115,9 @@ Use these inside endpoints and server functions.
   spigot?](https://kent-orr.github.io/spigot/articles/why-spigot.md):
 - [Getting
   started](https://kent-orr.github.io/spigot/articles/getting-started.md):
+- [Templates, static files and
+  blueprints](https://kent-orr.github.io/spigot/articles/flask-flow.md):
+- [Blueprints](https://kent-orr.github.io/spigot/articles/blueprints.md):
 - [Push, reactivity and
   concurrency](https://kent-orr.github.io/spigot/articles/reactivity.md):
 - [The browser client:

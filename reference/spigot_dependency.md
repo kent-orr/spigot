@@ -42,7 +42,7 @@ See
 spigot_dependency()
 #> List of 10
 #>  $ name      : chr "spigot"
-#>  $ version   : chr "0.1.1"
+#>  $ version   : chr "0.2.0"
 #>  $ src       :List of 1
 #>   ..$ file: chr "js"
 #>  $ meta      : NULL

@@ -509,12 +509,13 @@ their own dir in front of it.
 **Why.** The point of the release. Built on M14 (per-blueprint static
 prefix) and M15 (per-blueprint loader and partials).
 
-1.  Test, new `test-blueprint.R` (unit): `spigot_blueprint()` returns a
-    `spigot_blueprint` with `pages`, `api` (a `Plumber`, from a file or
-    router or `NULL`), `templates`, `partials`, `static`; rejects a page
-    path that is not a page path, an `api` that is neither;
-    [`print()`](https://rdrr.io/r/base/print.html) lists pages and
-    whether it has an API.
+1.  Test, new `test-blueprint.R` (unit):
+    [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+    returns a `spigot_blueprint` with `pages`, `api` (a `Plumber`, from
+    a file or router or `NULL`), `templates`, `partials`, `static`;
+    rejects a page path that is not a page path, an `api` that is
+    neither; [`print()`](https://rdrr.io/r/base/print.html) lists pages
+    and whether it has an API.
 2.  Test, `test-blueprint.R`:
     `register_blueprints(app_pages, blueprints, prefix)` returns the
     merged page list with `/cars` + `/` = `/cars`, `/cars` + `/model` =
@@ -535,7 +536,8 @@ prefix) and M15 (per-blueprint loader and partials).
 5.  Test, `test-client.R`: `spigot.get("cars/fit")` reaches the mounted
     router (one e2e case; the prefix handling in spigot.js is unchanged,
     this pins that).
-6.  Code, new `R/blueprint.R`: `spigot_blueprint()`,
+6.  Code, new `R/blueprint.R`:
+    [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md),
     `print.spigot_blueprint()`, `register_blueprints()`. API mounting:
     `plumber::pr_mount(app_pr, "/<name>", bp_pr)` where `<name>` is the
     blueprint prefix without its slash;
@@ -547,7 +549,8 @@ prefix) and M15 (per-blueprint loader and partials).
 7.  Code, `R/app.R`: `spigot_app(blueprints = NULL)`; `as_pages()` runs
     after `register_blueprints()`, so every existing path check applies
     to the merged list. Help: a “Blueprints” section;
-    `?spigot_blueprint` is reference only (M12 rule).
+    [`?spigot_blueprint`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+    is reference only (M12 rule).
 
 ### M17: example, vignette, release 0.2.0
 

@@ -837,3 +837,133 @@ warm-up iterations:
   and the call, with `clearTimeout()` in `finally`. A call that times
   out while still waiting for `spigot.ready` never fetches (it checks
   `signal.aborted` after the wait), as before.
+
+## 2026-10-21 — M14: `static` and `root`
+
+- **`static` dirs are httpuv static paths**, set in `mount_app()`’s
+  existing on-start
+  [`later::later()`](https://later.r-lib.org/reference/later.html) call,
+  next to the API prefix exclusion (`set_static_paths()`, formerly
+  `exclude_static_prefix()`). PLAN M14 step 5 also set `app$staticPaths`
+  for object mode. Not needed: `runApp()` calls the app’s `onStart` in
+  both launch modes, and the server exists by the first event-loop tick
+  in both. Checked: `test-launch.R` serves `/static/extra.js` in object
+  mode with only the on-start path. One mechanism, so the two modes
+  cannot drift.
+- **`root` and the dirs are resolved when
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  is called**, to normalized absolute paths. In directory mode that is
+  inside Shiny’s `setwd(appDir)`, so `root = "."` is the app directory;
+  in object mode it is the working directory at the call, as for
+  template files. An absolute static dir is used as given.
+- **Overlap with the API prefix:** PLAN said a static prefix “equal to
+  or under” the API prefix is an error. A static name is one segment, so
+  it can only be equal; the check is that the name is not the prefix’s
+  first segment, which also refuses `/api` when the prefix is `/api/v1`
+  (httpuv would serve `/api/...` files around the API).
+- **Added, not in the plan:** a page at or under a static path is an
+  error, with `check_pages_vs_prefix()`’s message (“so it would never be
+  served”): httpuv answers those paths before R.
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  checks pages before `root` and `static`, so an app sourced from the
+  wrong directory still reports the missing template first.
+- `static = NULL` (the default) sets exactly the paths 0.1.1 set: only
+  the exclusion.
+
+## 2026-10-21 — M15: template search path, partial dirs, pages resolved at build
+
+- **Every
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
+  is resolved when
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  builds the app**, by `resolve_page(page, loader, partials)`: template
+  and partial files are read, the app’s partials merged in (the page’s
+  win), the `</head>` and partial-reference checks run, and `render`
+  built.
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
+  only validates its arguments and records them;
+  [`print()`](https://rdrr.io/r/base/print.html) says “(unresolved)”.
+  PLAN M15 kept text templates rendering at creation. Not done: the
+  app’s `partials` must reach every page, and a text template using
+  `{{> nav}}` from them cannot pass the partial check on its own. One
+  rule instead of two. The errors and their messages are the same, and
+  still come before the app runs, from
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  instead of
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md).
+  `resolve_page()` returns a copy, so one page object can serve two apps
+  (or, in M16, two blueprints) with different search paths.
+- **`as_pages()` stays validation only**;
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  resolves the pages after it (PLAN said from `as_pages()`).
+  `as_pages(p)` still returns `p` itself.
+- **Only the partials a page uses are checked**, following `{{> }}` tags
+  from the template through the partials it reaches. In 0.1.1 every
+  partial given to a page was checked, and any of them could supply
+  `</head>`. With app-wide partials, one meant for other pages may use
+  partials this page lacks, or hold the `</head>` this page does not
+  use. The render-time `</head>` check stays.
+- **Lookup order** for a file name: each `templates` entry in order (a
+  directory holding the name, or a file whose basename is the name),
+  then the name relative to `root` (the 0.1.1 rule, with `root = "."`
+  the working directory at
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)).
+  Absolute names are read as given. Every `templates` entry must exist.
+  The miss error keeps 0.1.1’s text and lists every place it looked in
+  place of “(relative to )”. Page partial file names use the same
+  lookup.
+- **App `partials`:** `NULL`, a directory (one partial per regular file,
+  named by the file name without its last extension; hidden files and
+  subdirectories skipped; two files with one name are an error), or a
+  named list exactly like
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)’s.
+  PLAN’s “a list may mix dirs and strings only at the top level” is read
+  as: an unnamed element, such as `list("dir")`, is an error, because a
+  list holds partials, not directories.
+- `templates = "templates"` is not a default (PLAN M15 step 6).
+
+## 2026-10-21 — M16: blueprints
+
+- **[`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+  validates and records; nothing is read until
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  builds the app**, the M15 rule. That includes its plumber file: PLAN
+  M16 had `api` parsed into a router at creation. Read at build instead,
+  so the file is relative to the app’s `root` like the blueprint’s
+  `templates`, `partials` and `static`. The file is evaluated in the
+  environment
+  [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+  was called from (captured at creation), so in an app directory it sees
+  the functions in `R/`. Checked in `test-blueprint.R`.
+- **The app’s own `api` file is now relative to `root` too.** With
+  `root = "."` that is the working directory at
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md),
+  exactly as in 0.1.1.
+- **Mounting mutates the app’s router.**
+  [`plumber::pr_mount()`](https://www.rplumber.io/reference/pr_mount.html)
+  adds each blueprint API to the app’s `Plumber` object in place. A
+  router passed as `api` therefore gains the mounts. Mounts are keyed by
+  path, so building two apps from one router does not stack them.
+  Accepted rather than cloning an R6 router.
+- **Resolution per blueprint:** `register_blueprints()` records
+  `page$blueprint` on each blueprint
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md),
+  and
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  resolves it with `template_loader(c(bp$templates, templates), root)`
+  and `merge_partials(app partials, blueprint partials)`, so a page’s
+  own partials beat the blueprint’s, which beat the app’s.
+- **`{{static}}`** is added by wrapping `data`: a list gets `static`
+  unless it has one; a function’s result gets it the same way at each
+  request. It is added only when the blueprint has `static`. A non-list
+  result is left for the render-time “must return a list” error.
+- **Blueprint `static` is one directory**, served at `<prefix>/static`
+  through M14’s `set_static_paths()`; a multi-segment prefix works with
+  httpuv (checked live: `/cars/static/cars.js`). Every static path, the
+  app’s and the blueprints’, is checked against every page.
+- `check_pages_vs_prefix()` gains `noun`, so a blueprint under the API
+  prefix says “The blueprint …”. PLAN M16 step 5’s browser test
+  (`spigot.get("cars/fit")`) lives in `test-blueprint.R` with the
+  blueprint fixture rather than in `test-client.R`.
+- `/shared` is one of Shiny’s reserved prefixes, so the fixture’s
+  shadowing page is `/common`.

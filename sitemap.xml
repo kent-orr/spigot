@@ -4,7 +4,9 @@
 <url><loc>https://kent-orr.github.io/spigot/LICENSE-text.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/LICENSE.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/PLAN.html</loc></url>
+<url><loc>https://kent-orr.github.io/spigot/articles/blueprints.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/articles/client.html</loc></url>
+<url><loc>https://kent-orr.github.io/spigot/articles/flask-flow.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/articles/getting-started.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/articles/index.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/articles/reactivity.html</loc></url>
@@ -17,6 +19,7 @@
 <url><loc>https://kent-orr.github.io/spigot/reference/spigot-package.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/reference/spigot_api.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/reference/spigot_app.html</loc></url>
+<url><loc>https://kent-orr.github.io/spigot/reference/spigot_blueprint.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/reference/spigot_dependency.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/reference/spigot_emit.html</loc></url>
 <url><loc>https://kent-orr.github.io/spigot/reference/spigot_json.html</loc></url>

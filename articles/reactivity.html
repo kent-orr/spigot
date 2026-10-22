@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,8 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/why-spigot.html">Why spigot?</a></li>
     <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="../articles/flask-flow.html">Templates, static files and blueprints</a></li>
+    <li><a class="dropdown-item" href="../articles/blueprints.html">Blueprints</a></li>
     <li><a class="dropdown-item" href="../articles/reactivity.html">Push, reactivity and concurrency</a></li>
     <li><a class="dropdown-item" href="../articles/client.html">The browser client: spigot.js</a></li>
   </ul>
@@ -357,31 +359,37 @@ once, and calls the API from its buttons:</p>
 <span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a>  <span class="fu">showCount</span>(msg<span class="op">.</span><span class="at">count</span>)<span class="op">;</span></span>
 <span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a>  <span class="fu">log</span>(<span class="vs">`push  count: </span><span class="sc">${</span>msg<span class="op">.</span><span class="at">count</span><span class="sc">}</span><span class="vs"> (+</span><span class="sc">${</span>msg<span class="op">.</span><span class="at">by</span><span class="sc">}</span><span class="vs">)`</span>)<span class="op">;</span></span>
 <span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a>})<span class="op">;</span></span>
-<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a>spigot<span class="op">.</span><span class="fu">on</span>(<span class="st">"tabs"</span><span class="op">,</span> (msg) <span class="kw">=&gt;</span> {</span>
-<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a>  <span class="fu">$</span>(<span class="st">"tabs"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> msg<span class="op">.</span><span class="at">tabs</span><span class="op">;</span></span>
-<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a>  <span class="fu">log</span>(<span class="vs">`push  tabs: </span><span class="sc">${</span>msg<span class="op">.</span><span class="at">tabs</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
-<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a>})<span class="op">;</span></span>
-<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a></span>
-<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a><span class="co">// HTTP: read the current state once. spigot.get() waits for the Shiny session.</span></span>
-<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a>spigot<span class="op">.</span><span class="fu">get</span>(<span class="st">"state"</span>)<span class="op">.</span><span class="fu">then</span>((s) <span class="kw">=&gt;</span> {</span>
-<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a>  <span class="fu">showCount</span>(s<span class="op">.</span><span class="at">count</span>)<span class="op">;</span></span>
-<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a>  <span class="fu">$</span>(<span class="st">"tabs"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> s<span class="op">.</span><span class="at">tabs</span><span class="op">;</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">// The number of tabs goes down as well as up, so "highest seen" does not work</span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">// for it. Once one push has arrived, every later change arrives as a push too,</span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">// and a reply that lands after it may be older, so the reply is ignored.</span></span>
+<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="kw">let</span> tabsPushed <span class="op">=</span> <span class="kw">false</span><span class="op">;</span></span>
+<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a>spigot<span class="op">.</span><span class="fu">on</span>(<span class="st">"tabs"</span><span class="op">,</span> (msg) <span class="kw">=&gt;</span> {</span>
+<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a>  tabsPushed <span class="op">=</span> <span class="kw">true</span><span class="op">;</span></span>
+<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a>  <span class="fu">$</span>(<span class="st">"tabs"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> msg<span class="op">.</span><span class="at">tabs</span><span class="op">;</span></span>
+<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a>  <span class="fu">log</span>(<span class="vs">`push  tabs: </span><span class="sc">${</span>msg<span class="op">.</span><span class="at">tabs</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
 <span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a>})<span class="op">;</span></span>
 <span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a></span>
-<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="kw">async</span> <span class="kw">function</span> <span class="fu">add</span>(by) {</span>
-<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a>  <span class="cf">try</span> {</span>
-<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a>    <span class="kw">const</span> reply <span class="op">=</span> <span class="cf">await</span> spigot<span class="op">.</span><span class="fu">post</span>(<span class="st">"increment"</span><span class="op">,</span> { by })<span class="op">;</span></span>
-<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a>    <span class="fu">showCount</span>(reply<span class="op">.</span><span class="at">count</span>)<span class="op">;</span></span>
-<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a>    <span class="fu">log</span>(<span class="vs">`reply count: </span><span class="sc">${</span>reply<span class="op">.</span><span class="at">count</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
-<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a>  } <span class="cf">catch</span> (err) {</span>
-<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span>(err <span class="kw">instanceof</span> spigot<span class="op">.</span><span class="at">SpigotError</span>)) <span class="cf">throw</span> err<span class="op">;</span></span>
-<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a>    <span class="fu">log</span>(<span class="vs">`reply </span><span class="sc">${</span>err<span class="op">.</span><span class="at">status</span><span class="sc">}</span><span class="vs">: </span><span class="sc">${</span>err<span class="op">.</span><span class="at">message</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
-<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a>  }</span>
-<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a>}</span>
-<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a></span>
-<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"plus-one"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"click"</span><span class="op">,</span> () <span class="kw">=&gt;</span> <span class="fu">add</span>(<span class="dv">1</span>))<span class="op">;</span></span>
-<span id="cb7-50"><a href="#cb7-50" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"plus-five"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"click"</span><span class="op">,</span> () <span class="kw">=&gt;</span> <span class="fu">add</span>(<span class="dv">5</span>))<span class="op">;</span></span>
-<span id="cb7-51"><a href="#cb7-51" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"plus-bad"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"click"</span><span class="op">,</span> () <span class="kw">=&gt;</span> <span class="fu">add</span>(<span class="dv">11</span>))<span class="op">;</span></span></code></pre></div>
+<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="co">// HTTP: read the current state once. spigot.get() waits for the Shiny session.</span></span>
+<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a>spigot<span class="op">.</span><span class="fu">get</span>(<span class="st">"state"</span>)<span class="op">.</span><span class="fu">then</span>((s) <span class="kw">=&gt;</span> {</span>
+<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a>  <span class="fu">showCount</span>(s<span class="op">.</span><span class="at">count</span>)<span class="op">;</span></span>
+<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a>  <span class="cf">if</span> (<span class="op">!</span>tabsPushed) <span class="fu">$</span>(<span class="st">"tabs"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> s<span class="op">.</span><span class="at">tabs</span><span class="op">;</span></span>
+<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a>})<span class="op">;</span></span>
+<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a></span>
+<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a><span class="kw">async</span> <span class="kw">function</span> <span class="fu">add</span>(by) {</span>
+<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a>  <span class="cf">try</span> {</span>
+<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a>    <span class="kw">const</span> reply <span class="op">=</span> <span class="cf">await</span> spigot<span class="op">.</span><span class="fu">post</span>(<span class="st">"increment"</span><span class="op">,</span> { by })<span class="op">;</span></span>
+<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a>    <span class="fu">showCount</span>(reply<span class="op">.</span><span class="at">count</span>)<span class="op">;</span></span>
+<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a>    <span class="fu">log</span>(<span class="vs">`reply count: </span><span class="sc">${</span>reply<span class="op">.</span><span class="at">count</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
+<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a>  } <span class="cf">catch</span> (err) {</span>
+<span id="cb7-50"><a href="#cb7-50" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span>(err <span class="kw">instanceof</span> spigot<span class="op">.</span><span class="at">SpigotError</span>)) <span class="cf">throw</span> err<span class="op">;</span></span>
+<span id="cb7-51"><a href="#cb7-51" tabindex="-1"></a>    <span class="fu">log</span>(<span class="vs">`reply </span><span class="sc">${</span>err<span class="op">.</span><span class="at">status</span><span class="sc">}</span><span class="vs">: </span><span class="sc">${</span>err<span class="op">.</span><span class="at">message</span><span class="sc">}</span><span class="vs">`</span>)<span class="op">;</span></span>
+<span id="cb7-52"><a href="#cb7-52" tabindex="-1"></a>  }</span>
+<span id="cb7-53"><a href="#cb7-53" tabindex="-1"></a>}</span>
+<span id="cb7-54"><a href="#cb7-54" tabindex="-1"></a></span>
+<span id="cb7-55"><a href="#cb7-55" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"plus-one"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"click"</span><span class="op">,</span> () <span class="kw">=&gt;</span> <span class="fu">add</span>(<span class="dv">1</span>))<span class="op">;</span></span>
+<span id="cb7-56"><a href="#cb7-56" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"plus-five"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"click"</span><span class="op">,</span> () <span class="kw">=&gt;</span> <span class="fu">add</span>(<span class="dv">5</span>))<span class="op">;</span></span>
+<span id="cb7-57"><a href="#cb7-57" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"plus-bad"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"click"</span><span class="op">,</span> () <span class="kw">=&gt;</span> <span class="fu">add</span>(<span class="dv">11</span>))<span class="op">;</span></span></code></pre></div>
 </div>
 <div class="section level2">
 <h2 id="concurrency">Concurrency<a class="anchor" aria-label="anchor" href="#concurrency"></a>

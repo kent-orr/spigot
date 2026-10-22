@@ -6,6 +6,8 @@
   : Create a Shiny app with a plumber API mounted inside it
 - [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
   : A page rendered from a whisker template
+- [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+  : A blueprint: pages, an API and files that belong together
 - [`spigot_api()`](https://kent-orr.github.io/spigot/reference/spigot_api.md)
   : Build the API router
 

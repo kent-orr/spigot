@@ -29,7 +29,8 @@ spigot_page(template, data = list(), partials = list(), cache = FALSE)
 
 - partials:
 
-  A named list of partial templates: text or file paths.
+  A named list of partial templates: text or file names. They win over
+  the app's partials of the same name.
 
 - cache:
 
@@ -44,23 +45,28 @@ An object of class `spigot_page`, for the `pages` argument of
 ## Templates
 
 The template must be a full document with a `</head>` tag (in any case),
-either in the template itself or in a partial. Shiny's scripts go just
-before it. A string containing `<`, `{{` or a line break is the template
-text; any other string is the path of a file holding it, read as UTF-8
-when `spigot_page()` is called. A relative path is relative to the
-working directory then, which is the app's directory when the app
-directory is run with
-[`shiny::runApp()`](https://rdrr.io/pkg/shiny/man/runApp.html) (see
+either in the template itself or in a partial it uses. Shiny's scripts
+go just before it. A string containing `<`, `{{` or a line break is the
+template text; any other string names a file holding it, read as UTF-8
+when
+[`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+builds the app. The file is looked up on the app's `templates` search
+path, then relative to its `root`, which is the working directory when
+[`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+is called (the app's directory when the app directory is run with
+[`shiny::runApp()`](https://rdrr.io/pkg/shiny/man/runApp.html); see
 "Running the app" in
 [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)).
-`partials` follow the same rule.
+File names in `partials` are looked up the same way.
 
 The template sees only `data`, never R variables. `{{name}}` inserts a
 value with HTML escaped and `{{{name}}}` inserts it as raw HTML; neither
 is ever evaluated as R. Escaping covers `&`, `<`, `>` and `"` but not
 `'`, so put values in double-quoted attributes (`value="{{name}}"`).
-`{{> name}}` inserts `partials$name`, and a partial that is not in
-`partials` is an error when the page is created.
+`{{> name}}` inserts the partial `name`: from `partials`, or else from
+[`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)'s
+`partials`. A partial the page uses that neither has is an error when
+the app is built.
 
 ## Relative URLs
 

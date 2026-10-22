@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,8 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="articles/why-spigot.html">Why spigot?</a></li>
     <li><a class="dropdown-item" href="articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="articles/flask-flow.html">Templates, static files and blueprints</a></li>
+    <li><a class="dropdown-item" href="articles/blueprints.html">Blueprints</a></li>
     <li><a class="dropdown-item" href="articles/reactivity.html">Push, reactivity and concurrency</a></li>
     <li><a class="dropdown-item" href="articles/client.html">The browser client: spigot.js</a></li>
   </ul></li>
@@ -390,6 +392,54 @@
 <strong>Still a classic script in an IIFE.</strong> A module is deferred and sees <code>document.currentScript === null</code>, which breaks the <code>data-prefix</code> read and the guarantee that <code>shiny.js</code> runs first. The IIFE keeps spigot’s names private: a top-level <code>const</code> in a classic script is a global lexical binding shared with the page’s own scripts, and the examples declare <code>const $</code>.</li>
 <li>
 <code>request()</code> is an <code>async function</code>: <code>Promise.race()</code> of the timeout and the call, with <code>clearTimeout()</code> in <code>finally</code>. A call that times out while still waiting for <code>spigot.ready</code> never fetches (it checks <code>signal.aborted</code> after the wait), as before.</li>
+</ul></div>
+<div class="section level2">
+<h2 id="id_2026-10-21--m14-static-and-root">2026-10-21 — M14: <code>static</code> and <code>root</code>
+<a class="anchor" aria-label="anchor" href="#id_2026-10-21--m14-static-and-root"></a></h2>
+<ul><li>
+<strong><code>static</code> dirs are httpuv static paths</strong>, set in <code>mount_app()</code>’s existing on-start <code><a href="https://later.r-lib.org/reference/later.html" class="external-link">later::later()</a></code> call, next to the API prefix exclusion (<code>set_static_paths()</code>, formerly <code>exclude_static_prefix()</code>). PLAN M14 step 5 also set <code>app$staticPaths</code> for object mode. Not needed: <code>runApp()</code> calls the app’s <code>onStart</code> in both launch modes, and the server exists by the first event-loop tick in both. Checked: <code>test-launch.R</code> serves <code>/static/extra.js</code> in object mode with only the on-start path. One mechanism, so the two modes cannot drift.</li>
+<li>
+<strong><code>root</code> and the dirs are resolved when <code><a href="reference/spigot_app.html">spigot_app()</a></code> is called</strong>, to normalized absolute paths. In directory mode that is inside Shiny’s <code>setwd(appDir)</code>, so <code>root = "."</code> is the app directory; in object mode it is the working directory at the call, as for template files. An absolute static dir is used as given.</li>
+<li>
+<strong>Overlap with the API prefix:</strong> PLAN said a static prefix “equal to or under” the API prefix is an error. A static name is one segment, so it can only be equal; the check is that the name is not the prefix’s first segment, which also refuses <code>/api</code> when the prefix is <code>/api/v1</code> (httpuv would serve <code>/api/...</code> files around the API).</li>
+<li>
+<strong>Added, not in the plan:</strong> a page at or under a static path is an error, with <code>check_pages_vs_prefix()</code>’s message (“so it would never be served”): httpuv answers those paths before R. <code><a href="reference/spigot_app.html">spigot_app()</a></code> checks pages before <code>root</code> and <code>static</code>, so an app sourced from the wrong directory still reports the missing template first.</li>
+<li>
+<code>static = NULL</code> (the default) sets exactly the paths 0.1.1 set: only the exclusion.</li>
+</ul></div>
+<div class="section level2">
+<h2 id="id_2026-10-21--m15-template-search-path-partial-dirs-pages-resolved-at-build">2026-10-21 — M15: template search path, partial dirs, pages resolved at build<a class="anchor" aria-label="anchor" href="#id_2026-10-21--m15-template-search-path-partial-dirs-pages-resolved-at-build"></a></h2>
+<ul><li>
+<strong>Every <code><a href="reference/spigot_page.html">spigot_page()</a></code> is resolved when <code><a href="reference/spigot_app.html">spigot_app()</a></code> builds the app</strong>, by <code>resolve_page(page, loader, partials)</code>: template and partial files are read, the app’s partials merged in (the page’s win), the <code>&lt;/head&gt;</code> and partial-reference checks run, and <code>render</code> built. <code><a href="reference/spigot_page.html">spigot_page()</a></code> only validates its arguments and records them; <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> says “(unresolved)”. PLAN M15 kept text templates rendering at creation. Not done: the app’s <code>partials</code> must reach every page, and a text template using <code>{{&gt; nav}}</code> from them cannot pass the partial check on its own. One rule instead of two. The errors and their messages are the same, and still come before the app runs, from <code><a href="reference/spigot_app.html">spigot_app()</a></code> instead of <code><a href="reference/spigot_page.html">spigot_page()</a></code>. <code>resolve_page()</code> returns a copy, so one page object can serve two apps (or, in M16, two blueprints) with different search paths.</li>
+<li>
+<strong><code>as_pages()</code> stays validation only</strong>; <code><a href="reference/spigot_app.html">spigot_app()</a></code> resolves the pages after it (PLAN said from <code>as_pages()</code>). <code>as_pages(p)</code> still returns <code>p</code> itself.</li>
+<li>
+<strong>Only the partials a page uses are checked</strong>, following <code>{{&gt; }}</code> tags from the template through the partials it reaches. In 0.1.1 every partial given to a page was checked, and any of them could supply <code>&lt;/head&gt;</code>. With app-wide partials, one meant for other pages may use partials this page lacks, or hold the <code>&lt;/head&gt;</code> this page does not use. The render-time <code>&lt;/head&gt;</code> check stays.</li>
+<li>
+<strong>Lookup order</strong> for a file name: each <code>templates</code> entry in order (a directory holding the name, or a file whose basename is the name), then the name relative to <code>root</code> (the 0.1.1 rule, with <code>root = "."</code> the working directory at <code><a href="reference/spigot_app.html">spigot_app()</a></code>). Absolute names are read as given. Every <code>templates</code> entry must exist. The miss error keeps 0.1.1’s text and lists every place it looked in place of “(relative to <wd>)”. Page partial file names use the same lookup.</wd></li>
+<li>
+<strong>App <code>partials</code>:</strong> <code>NULL</code>, a directory (one partial per regular file, named by the file name without its last extension; hidden files and subdirectories skipped; two files with one name are an error), or a named list exactly like <code><a href="reference/spigot_page.html">spigot_page()</a></code>’s. PLAN’s “a list may mix dirs and strings only at the top level” is read as: an unnamed element, such as <code>list("dir")</code>, is an error, because a list holds partials, not directories.</li>
+<li>
+<code>templates = "templates"</code> is not a default (PLAN M15 step 6).</li>
+</ul></div>
+<div class="section level2">
+<h2 id="id_2026-10-21--m16-blueprints">2026-10-21 — M16: blueprints<a class="anchor" aria-label="anchor" href="#id_2026-10-21--m16-blueprints"></a></h2>
+<ul><li>
+<strong><code><a href="reference/spigot_blueprint.html">spigot_blueprint()</a></code> validates and records; nothing is read until <code><a href="reference/spigot_app.html">spigot_app()</a></code> builds the app</strong>, the M15 rule. That includes its plumber file: PLAN M16 had <code>api</code> parsed into a router at creation. Read at build instead, so the file is relative to the app’s <code>root</code> like the blueprint’s <code>templates</code>, <code>partials</code> and <code>static</code>. The file is evaluated in the environment <code><a href="reference/spigot_blueprint.html">spigot_blueprint()</a></code> was called from (captured at creation), so in an app directory it sees the functions in <code>R/</code>. Checked in <code>test-blueprint.R</code>.</li>
+<li>
+<strong>The app’s own <code>api</code> file is now relative to <code>root</code> too.</strong> With <code>root = "."</code> that is the working directory at <code><a href="reference/spigot_app.html">spigot_app()</a></code>, exactly as in 0.1.1.</li>
+<li>
+<strong>Mounting mutates the app’s router.</strong> <code><a href="https://www.rplumber.io/reference/pr_mount.html" class="external-link">plumber::pr_mount()</a></code> adds each blueprint API to the app’s <code>Plumber</code> object in place. A router passed as <code>api</code> therefore gains the mounts. Mounts are keyed by path, so building two apps from one router does not stack them. Accepted rather than cloning an R6 router.</li>
+<li>
+<strong>Resolution per blueprint:</strong> <code>register_blueprints()</code> records <code>page$blueprint</code> on each blueprint <code><a href="reference/spigot_page.html">spigot_page()</a></code>, and <code><a href="reference/spigot_app.html">spigot_app()</a></code> resolves it with <code>template_loader(c(bp$templates, templates), root)</code> and <code>merge_partials(app partials, blueprint partials)</code>, so a page’s own partials beat the blueprint’s, which beat the app’s.</li>
+<li>
+<strong><code>{{static}}</code></strong> is added by wrapping <code>data</code>: a list gets <code>static</code> unless it has one; a function’s result gets it the same way at each request. It is added only when the blueprint has <code>static</code>. A non-list result is left for the render-time “must return a list” error.</li>
+<li>
+<strong>Blueprint <code>static</code> is one directory</strong>, served at <code>&lt;prefix&gt;/static</code> through M14’s <code>set_static_paths()</code>; a multi-segment prefix works with httpuv (checked live: <code>/cars/static/cars.js</code>). Every static path, the app’s and the blueprints’, is checked against every page.</li>
+<li>
+<code>check_pages_vs_prefix()</code> gains <code>noun</code>, so a blueprint under the API prefix says “The blueprint …”. PLAN M16 step 5’s browser test (<code>spigot.get("cars/fit")</code>) lives in <code>test-blueprint.R</code> with the blueprint fixture rather than in <code>test-client.R</code>.</li>
+<li>
+<code>/shared</code> is one of Shiny’s reserved prefixes, so the fixture’s shadowing page is <code>/common</code>.</li>
 </ul></div>
 </div>
 

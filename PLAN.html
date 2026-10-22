@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -21,6 +21,8 @@
   <button class="nav-link dropdown-toggle" type="button" id="dropdown-articles" data-bs-toggle="dropdown" aria-expanded="false" aria-haspopup="true">Articles</button>
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles"><li><a class="dropdown-item" href="articles/why-spigot.html">Why spigot?</a></li>
     <li><a class="dropdown-item" href="articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="articles/flask-flow.html">Templates, static files and blueprints</a></li>
+    <li><a class="dropdown-item" href="articles/blueprints.html">Blueprints</a></li>
     <li><a class="dropdown-item" href="articles/reactivity.html">Push, reactivity and concurrency</a></li>
     <li><a class="dropdown-item" href="articles/client.html">The browser client: spigot.js</a></li>
   </ul></li>
@@ -221,7 +223,7 @@
 <span><span class="op">)</span></span>
 <span></span>
 <span><span class="co"># R/cars.R</span></span>
-<span><span class="va">cars</span> <span class="op">&lt;-</span> <span class="fu">spigot_blueprint</span><span class="op">(</span></span>
+<span><span class="va">cars</span> <span class="op">&lt;-</span> <span class="fu"><a href="reference/spigot_blueprint.html">spigot_blueprint</a></span><span class="op">(</span></span>
 <span>  pages     <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"/"</span> <span class="op">=</span> <span class="fu"><a href="reference/spigot_page.html">spigot_page</a></span><span class="op">(</span><span class="st">"list.html"</span><span class="op">)</span>, <span class="st">"/model"</span> <span class="op">=</span> <span class="fu"><a href="reference/spigot_page.html">spigot_page</a></span><span class="op">(</span><span class="st">"model.html"</span><span class="op">)</span><span class="op">)</span>,</span>
 <span>  api       <span class="op">=</span> <span class="st">"api/cars.R"</span>,            <span class="co"># mounted at /api/cars</span></span>
 <span>  templates <span class="op">=</span> <span class="st">"templates/cars"</span>,        <span class="co"># searched before the app's</span></span>
@@ -268,13 +270,13 @@
 <div class="section level3">
 <h3 id="m16-blueprints">M16: blueprints<a class="anchor" aria-label="anchor" href="#m16-blueprints"></a></h3>
 <p><strong>Why.</strong> The point of the release. Built on M14 (per-blueprint static prefix) and M15 (per-blueprint loader and partials).</p>
-<ol style="list-style-type: decimal"><li>Test, new <code>test-blueprint.R</code> (unit): <code>spigot_blueprint()</code> returns a <code>spigot_blueprint</code> with <code>pages</code>, <code>api</code> (a <code>Plumber</code>, from a file or router or <code>NULL</code>), <code>templates</code>, <code>partials</code>, <code>static</code>; rejects a page path that is not a page path, an <code>api</code> that is neither; <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> lists pages and whether it has an API.</li>
+<ol style="list-style-type: decimal"><li>Test, new <code>test-blueprint.R</code> (unit): <code><a href="reference/spigot_blueprint.html">spigot_blueprint()</a></code> returns a <code>spigot_blueprint</code> with <code>pages</code>, <code>api</code> (a <code>Plumber</code>, from a file or router or <code>NULL</code>), <code>templates</code>, <code>partials</code>, <code>static</code>; rejects a page path that is not a page path, an <code>api</code> that is neither; <code><a href="https://rdrr.io/r/base/print.html" class="external-link">print()</a></code> lists pages and whether it has an API.</li>
 <li>Test, <code>test-blueprint.R</code>: <code>register_blueprints(app_pages, blueprints, prefix)</code> returns the merged page list with <code>/cars</code> + <code>/</code> = <code>/cars</code>, <code>/cars</code> + <code>/model</code> = <code>/cars/model</code>; a collision with an app page or another blueprint is an error naming both; a blueprint prefix under the API <code>prefix</code> is an error (reuse <code>check_pages_vs_prefix()</code>); <code>/</code> is not a valid blueprint prefix.</li>
 <li>Test, <code>test-blueprint.R</code>: a blueprint page’s <code>data</code> gains <code>static = "cars/static"</code> when the blueprint has <code>static</code>, and nothing otherwise; a function <code>data</code> gets it added to its result; a user key <code>static</code> wins (documented, not an error).</li>
 <li>Test, <code>test-blueprint.R</code> (server, <code>helper-server.R</code>): an app with one blueprint serves <code>/cars</code>, <code>/cars/model</code>, <code>/cars/static/cars.js</code>, and <code>/api/cars/fit</code>; the session guard applies to <code>/api/cars/fit</code> (401 without a token); the blueprint’s templates dir shadows the app’s for a same-named template; the blueprint’s partial <code>nav</code> shadows the app’s.</li>
 <li>Test, <code>test-client.R</code>: <code>spigot.get("cars/fit")</code> reaches the mounted router (one e2e case; the prefix handling in spigot.js is unchanged, this pins that).</li>
-<li>Code, new <code>R/blueprint.R</code>: <code>spigot_blueprint()</code>, <code>print.spigot_blueprint()</code>, <code>register_blueprints()</code>. API mounting: <code>plumber::pr_mount(app_pr, "/&lt;name&gt;", bp_pr)</code> where <code>&lt;name&gt;</code> is the blueprint prefix without its slash; <code><a href="reference/spigot_api.html">spigot_api()</a></code> builds the blueprint router so it gets <code><a href="reference/spigot_json.html">spigot_json()</a></code>. Static: each blueprint’s dir is added to the M14 list under <code>&lt;prefix&gt;/static</code>.</li>
-<li>Code, <code>R/app.R</code>: <code>spigot_app(blueprints = NULL)</code>; <code>as_pages()</code> runs after <code>register_blueprints()</code>, so every existing path check applies to the merged list. Help: a “Blueprints” section; <code>?spigot_blueprint</code> is reference only (M12 rule).</li>
+<li>Code, new <code>R/blueprint.R</code>: <code><a href="reference/spigot_blueprint.html">spigot_blueprint()</a></code>, <code>print.spigot_blueprint()</code>, <code>register_blueprints()</code>. API mounting: <code>plumber::pr_mount(app_pr, "/&lt;name&gt;", bp_pr)</code> where <code>&lt;name&gt;</code> is the blueprint prefix without its slash; <code><a href="reference/spigot_api.html">spigot_api()</a></code> builds the blueprint router so it gets <code><a href="reference/spigot_json.html">spigot_json()</a></code>. Static: each blueprint’s dir is added to the M14 list under <code>&lt;prefix&gt;/static</code>.</li>
+<li>Code, <code>R/app.R</code>: <code>spigot_app(blueprints = NULL)</code>; <code>as_pages()</code> runs after <code>register_blueprints()</code>, so every existing path check applies to the merged list. Help: a “Blueprints” section; <code><a href="reference/spigot_blueprint.html">?spigot_blueprint</a></code> is reference only (M12 rule).</li>
 </ol></div>
 <div class="section level3">
 <h3 id="m17-example-vignette-release-020">M17: example, vignette, release 0.2.0<a class="anchor" aria-label="anchor" href="#m17-example-vignette-release-020"></a></h3>

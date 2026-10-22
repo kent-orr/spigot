@@ -1,8 +1,9 @@
 # Create a Shiny app with a plumber API mounted inside it
 
 The API is served by the same process, origin and port as the app, under
-`prefix`. The `pages` are served at their paths, and every other path is
-handled by Shiny as usual (`www/` files, for an app directory).
+`prefix`. The `pages` are served at their paths, `static` directories at
+theirs, and every other path is handled by Shiny as usual (`www/` files,
+for an app directory).
 
 ## Usage
 
@@ -13,7 +14,12 @@ spigot_app(
   api,
   prefix = "/api",
   require_session = TRUE,
-  max_request_size = NULL
+  max_request_size = NULL,
+  blueprints = NULL,
+  templates = NULL,
+  partials = NULL,
+  static = NULL,
+  root = "."
 )
 ```
 
@@ -30,13 +36,14 @@ spigot_app(
 
 - api:
 
-  A plumber router or the path to a plumber file. A file is read with
+  A plumber router or the path to a plumber file, relative to `root`. A
+  file is read with
   [`spigot_api()`](https://kent-orr.github.io/spigot/reference/spigot_api.md);
   a router is used as given, so build it from
   [`spigot_api()`](https://kent-orr.github.io/spigot/reference/spigot_api.md)
   to get
   [`spigot_json()`](https://kent-orr.github.io/spigot/reference/spigot_json.md)
-  responses.
+  responses. Blueprint APIs are mounted on it.
 
 - prefix:
 
@@ -55,6 +62,41 @@ spigot_app(
   `options(shiny.maxRequestSize)` while the app runs (it also limits
   [`shiny::fileInput()`](https://rdrr.io/pkg/shiny/man/fileInput.html)
   uploads). `Inf` removes the limit. `NULL` leaves the option as it is.
+
+- blueprints:
+
+  `NULL`, or a list of
+  [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)s
+  named by the prefix each is served under. See the Blueprints section.
+
+- templates:
+
+  Where
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
+  template files are looked up, in order: directories, or files matched
+  by their name. A name not found there is a path relative to `root`.
+  `NULL` looks only there.
+
+- partials:
+
+  Partials every page can use: a directory, holding one partial per file
+  named by the file name without its extension (`nav.html` is
+  `{{> nav}}`), or a named list like
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)'s.
+  A page's own partials win over these.
+
+- static:
+
+  Directories of files to serve as they are: one directory, served at
+  `/static`, or a named list of them, served at `/<name>` each. `NULL`
+  serves none. See the Files section.
+
+- root:
+
+  The directory that relative `api`, `templates`, `partials` and
+  `static` paths, and template file names not on the search path, are
+  relative to, for the app and its blueprints. A relative `root` is
+  relative to the working directory when `spigot_app()` is called.
 
 ## Value
 
@@ -119,6 +161,36 @@ handler runs. That response is Shiny's own: status `413` with the
 **plain-text** body `Maximum upload size exceeded`, not JSON. Clients
 should not assume every error body is JSON.
 
+## Blueprints
+
+`blueprints` is a list of
+[`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)s
+named by prefix, such as `list("/cars" = cars)`. Each blueprint's pages
+are served under its prefix, its API under the app's `prefix`
+(`/api/cars/...`), and its static directory at `<prefix>/static`. Its
+pages are checked like the app's own: a path served twice, a page under
+the API prefix or a static path, and a missing template are errors when
+the app is built.
+
+## Files
+
+Files that pages load (scripts, stylesheets, images) can come from two
+places. `www/` is Shiny's: its files are served at the top level
+(`www/app.js` at `/app.js`), and only when the app directory is run (see
+"Running the app").
+
+`static` is spigot's, and is served however the app is run. It is one
+directory, served at `/static`, or a named list of directories served at
+`/<name>` each, such as `list(js = "js", img = "assets/img")`. A
+relative directory is relative to `root`, and a relative `root` to the
+working directory when `spigot_app()` is called. Files are served by
+httpuv without running R. A name must be one URL segment, other than
+`session`, `shared` and the first segment of `prefix`, and no page may
+be at or under a static path.
+
+Pages below the top level get a `<base href>` to the app's root, so
+`<script src="static/app.js">` loads the same file from every page.
+
 ## Running the app
 
 Run an app directory: `shiny::runApp("myapp")` or
@@ -132,8 +204,8 @@ console, when `app.R` is sourced with echo, or with `Rscript app.R`),
 but Shiny then does none of that. Template and plumber file paths are
 relative to whatever the working directory is, `www/` files get the
 `404` HTML page (so a browser refuses to run a `www/` script), and
-endpoints can't call functions from `R/`. From a terminal, use
-`Rscript -e 'shiny::runApp("myapp")'`.
+endpoints can't call functions from `R/`. `static` directories are still
+served. From a terminal, use `Rscript -e 'shiny::runApp("myapp")'`.
 
 ## Examples
 

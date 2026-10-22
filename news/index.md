@@ -1,5 +1,38 @@
 # Changelog
 
+## spigot 0.2.0
+
+- Blueprints:
+  [`spigot_blueprint()`](https://kent-orr.github.io/spigot/reference/spigot_blueprint.md)
+  groups a section’s pages, API, templates, partials and static files,
+  and `spigot_app(blueprints = list("/cars" = cars))` serves its pages
+  under `/cars`, its API under `/api/cars` and its static files at
+  `/cars/static`, which its pages see as `{{static}}`.
+  [`vignette("blueprints")`](https://kent-orr.github.io/spigot/articles/blueprints.md)
+  explains them and
+  [`vignette("flask-flow")`](https://kent-orr.github.io/spigot/articles/flask-flow.md)
+  shows the folder layout.
+- `spigot_app(templates =)` is a search path for template files, and
+  `spigot_app(partials =)` gives every page shared partials: a folder
+  (one partial per file) or a named list. A page’s own partials win.
+- `spigot_app(static =)` serves folders at `/static` (or `/<name>` each)
+  in every launch mode, not only when the app folder is run, as `www/`
+  is.
+- `spigot_app(root =)` is the folder that these paths, and the `api`
+  file, are relative to. It defaults to the working directory, as in
+  0.1.x.
+- Template files are now read, and their checks run, when
+  [`spigot_app()`](https://kent-orr.github.io/spigot/reference/spigot_app.md)
+  builds the app rather than when
+  [`spigot_page()`](https://kent-orr.github.io/spigot/reference/spigot_page.md)
+  is called. The errors are the same, and a missing file’s error now
+  lists every place spigot looked. Only the partials a page uses are
+  checked.
+- The `site` example is now laid out with `templates/`, `static/` and
+  two blueprints. The `live` example no longer shows a stale tab count
+  when its first reply arrives late.
+- No breaking changes: every new argument defaults to 0.1.1 behaviour.
+
 ## spigot 0.1.1
 
 - Internal simplification; no change to behaviour, except that

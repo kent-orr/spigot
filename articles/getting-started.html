@@ -20,7 +20,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.1.1</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -36,6 +36,8 @@
   <ul class="dropdown-menu" aria-labelledby="dropdown-articles">
 <li><a class="dropdown-item" href="../articles/why-spigot.html">Why spigot?</a></li>
     <li><a class="dropdown-item" href="../articles/getting-started.html">Getting started</a></li>
+    <li><a class="dropdown-item" href="../articles/flask-flow.html">Templates, static files and blueprints</a></li>
+    <li><a class="dropdown-item" href="../articles/blueprints.html">Blueprints</a></li>
     <li><a class="dropdown-item" href="../articles/reactivity.html">Push, reactivity and concurrency</a></li>
     <li><a class="dropdown-item" href="../articles/client.html">The browser client: spigot.js</a></li>
   </ul>
@@ -429,28 +431,34 @@ another origin get a <code>403</code>.</p>
 </h2>
 <p><code>site</code> is a small site about R’s <code>mtcars</code> data
 with three pages: a home page, a table of the cars, and a page that fits
-a regression. It shows templates with data, shared partials, and an
-endpoint whose work runs in another R process.</p>
+a regression. It shows templates with data, shared partials, blueprints,
+and an endpoint whose work runs in another R process.</p>
 <pre><code>site/
 ├── app.R
 ├── api.R
-├── pages/      # one template per page
+├── R/                  # loaded by Shiny before app.R
+│   ├── data.R          # the data, and a page() helper
+│   ├── pages-cars.R    # the cars blueprint
+│   └── pages-model.R   # the model blueprint
+├── templates/
 │   ├── index.html
-│   ├── cars.html
-│   └── model.html
-├── partials/   # shared by every page
-│   ├── head.html
-│   ├── nav.html
-│   └── footer.html
-└── www/
+│   ├── partials/       # shared by every page
+│   │   ├── head.html
+│   │   ├── nav.html
+│   │   └── footer.html
+│   ├── cars/cars.html
+│   └── model/model.html
+└── static/
     ├── site.css
-    ├── cars.js
-    └── model.js</code></pre>
+    ├── cars/cars.js
+    └── model/model.js</code></pre>
 <div class="sourceCode" id="cb12"><pre class="downlit sourceCode r">
 <code class="sourceCode R"><span><span class="co"># spigot "site" example: a small multi-page site about R's mtcars data.</span></span>
 <span><span class="co">#</span></span>
-<span><span class="co"># * Three pages, each a whisker template in pages/, sharing the partials in</span></span>
-<span><span class="co">#   partials/ (the &lt;head&gt;, the nav bar and the footer).</span></span>
+<span><span class="co"># * Templates live in templates/, shared partials (the &lt;head&gt;, the nav bar and</span></span>
+<span><span class="co">#   the footer) in templates/partials/, and files the pages load in static/.</span></span>
+<span><span class="co"># * The /cars and /model sections are blueprints, defined in R/: each has its</span></span>
+<span><span class="co">#   own templates and static files. Shiny loads R/ before this file.</span></span>
 <span><span class="co"># * The /cars page is rendered in R with every row; its filter form then</span></span>
 <span><span class="co">#   calls the API and redraws the table in the browser.</span></span>
 <span><span class="co"># * The /model page calls an endpoint that bootstraps a regression in a</span></span>
@@ -463,52 +471,43 @@ endpoint whose work runs in another R process.</p>
 <span><span class="fu">future</span><span class="fu">::</span><span class="fu"><a href="https://future.futureverse.org/reference/plan.html" class="external-link">plan</a></span><span class="op">(</span><span class="fu">future</span><span class="fu">::</span><span class="va"><a href="https://future.futureverse.org/reference/multisession.html" class="external-link">multisession</a></span>, workers <span class="op">=</span> <span class="fl">2</span><span class="op">)</span></span>
 <span><span class="fu">shiny</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/shiny/man/onStop.html" class="external-link">onStop</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="op">)</span> <span class="fu">future</span><span class="fu">::</span><span class="fu"><a href="https://future.futureverse.org/reference/plan.html" class="external-link">plan</a></span><span class="op">(</span><span class="fu">future</span><span class="fu">::</span><span class="va"><a href="https://future.futureverse.org/reference/sequential.html" class="external-link">sequential</a></span><span class="op">)</span><span class="op">)</span></span>
 <span></span>
-<span><span class="va">cars</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/data.frame.html" class="external-link">data.frame</a></span><span class="op">(</span>model <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/colnames.html" class="external-link">rownames</a></span><span class="op">(</span><span class="fu">datasets</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/r/datasets/mtcars.html" class="external-link">mtcars</a></span><span class="op">)</span>, <span class="fu">datasets</span><span class="fu">::</span><span class="va"><a href="https://rdrr.io/r/datasets/mtcars.html" class="external-link">mtcars</a></span>, row.names <span class="op">=</span> <span class="cn">NULL</span><span class="op">)</span></span>
-<span><span class="va">predictors</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span></span>
-<span>  wt <span class="op">=</span> <span class="st">"Weight (1000 lbs)"</span>, hp <span class="op">=</span> <span class="st">"Horsepower"</span>, disp <span class="op">=</span> <span class="st">"Displacement (cu. in.)"</span>,</span>
-<span>  qsec <span class="op">=</span> <span class="st">"Quarter-mile time (s)"</span>, drat <span class="op">=</span> <span class="st">"Rear axle ratio"</span></span>
-<span><span class="op">)</span></span>
-<span></span>
-<span><span class="co"># A page of the site: its template, the shared partials, and its data. `key`</span></span>
-<span><span class="co"># tells the nav partial which link is the current page. The data never</span></span>
-<span><span class="co"># changes, so each page is rendered once and cached.</span></span>
-<span><span class="va">page</span> <span class="op">&lt;-</span> <span class="kw">function</span><span class="op">(</span><span class="va">file</span>, <span class="va">key</span>, <span class="va">title</span>, <span class="va">data</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="op">)</span><span class="op">)</span> <span class="op">{</span></span>
-<span>  <span class="fu"><a href="../reference/spigot_page.html">spigot_page</a></span><span class="op">(</span></span>
-<span>    <span class="fu"><a href="https://rdrr.io/r/base/file.path.html" class="external-link">file.path</a></span><span class="op">(</span><span class="st">"pages"</span>, <span class="va">file</span><span class="op">)</span>,</span>
-<span>    data <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>title <span class="op">=</span> <span class="va">title</span>, page <span class="op">=</span> <span class="fu">stats</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/r/stats/setNames.html" class="external-link">setNames</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="cn">TRUE</span><span class="op">)</span>, <span class="va">key</span><span class="op">)</span><span class="op">)</span>, <span class="va">data</span><span class="op">)</span>,</span>
-<span>    partials <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      head <span class="op">=</span> <span class="st">"partials/head.html"</span>,</span>
-<span>      nav <span class="op">=</span> <span class="st">"partials/nav.html"</span>,</span>
-<span>      footer <span class="op">=</span> <span class="st">"partials/footer.html"</span></span>
-<span>    <span class="op">)</span>,</span>
-<span>    cache <span class="op">=</span> <span class="cn">TRUE</span></span>
-<span>  <span class="op">)</span></span>
-<span><span class="op">}</span></span>
-<span></span>
 <span><span class="fu"><a href="../reference/spigot_app.html">spigot_app</a></span><span class="op">(</span></span>
 <span>  pages <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
 <span>    <span class="st">"/"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/utils/page.html" class="external-link">page</a></span><span class="op">(</span><span class="st">"index.html"</span>, <span class="st">"home"</span>, <span class="st">"Home"</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">cars</span><span class="op">)</span>,</span>
+<span>      n <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/nrow.html" class="external-link">nrow</a></span><span class="op">(</span><span class="va">car_data</span><span class="op">)</span>,</span>
 <span>      predictors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">predictors</span><span class="op">)</span></span>
-<span>    <span class="op">)</span><span class="op">)</span>,</span>
-<span>    <span class="st">"/cars"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/utils/page.html" class="external-link">page</a></span><span class="op">(</span><span class="st">"cars.html"</span>, <span class="st">"cars"</span>, <span class="st">"Cars"</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      rows <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu">whisker</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/whisker/man/rowSplit.html" class="external-link">rowSplit</a></span><span class="op">(</span><span class="va">cars</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"model"</span>, <span class="st">"mpg"</span>, <span class="st">"cyl"</span>, <span class="st">"hp"</span>, <span class="st">"wt"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
-<span>    <span class="op">)</span><span class="op">)</span>,</span>
-<span>    <span class="st">"/model"</span> <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/utils/page.html" class="external-link">page</a></span><span class="op">(</span><span class="st">"model.html"</span>, <span class="st">"model"</span>, <span class="st">"Model"</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
-<span>      predictors <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/funprog.html" class="external-link">Map</a></span><span class="op">(</span><span class="kw">function</span><span class="op">(</span><span class="va">name</span>, <span class="va">label</span><span class="op">)</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>name <span class="op">=</span> <span class="va">name</span>, label <span class="op">=</span> <span class="va">label</span><span class="op">)</span>,</span>
-<span>                       <span class="fu"><a href="https://rdrr.io/r/base/names.html" class="external-link">names</a></span><span class="op">(</span><span class="va">predictors</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="va">predictors</span><span class="op">)</span>, USE.NAMES <span class="op">=</span> <span class="cn">FALSE</span><span class="op">)</span></span>
 <span>    <span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="op">)</span>,</span>
-<span>  api <span class="op">=</span> <span class="st">"api.R"</span></span>
+<span>  blueprints <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span><span class="st">"/cars"</span> <span class="op">=</span> <span class="va">cars</span>, <span class="st">"/model"</span> <span class="op">=</span> <span class="va">model</span><span class="op">)</span>,</span>
+<span>  api <span class="op">=</span> <span class="st">"api.R"</span>,</span>
+<span>  templates <span class="op">=</span> <span class="st">"templates"</span>,</span>
+<span>  partials <span class="op">=</span> <span class="st">"templates/partials"</span>,</span>
+<span>  static <span class="op">=</span> <span class="st">"static"</span></span>
 <span><span class="op">)</span></span></code></pre></div>
+<p><code>templates</code>, <code>partials</code> and <code>static</code>
+say where the files are; the <code>/cars</code> and <code>/model</code>
+sections are blueprints, each with its own templates and static
+files:</p>
+<div class="sourceCode" id="cb13"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># The cars section: its page renders every row in R; static/cars/cars.js</span></span>
+<span><span class="co"># filters them through the API. Mounted at /cars in app.R.</span></span>
+<span><span class="va">cars</span> <span class="op">&lt;-</span> <span class="fu">spigot</span><span class="fu">::</span><span class="fu"><a href="../reference/spigot_blueprint.html">spigot_blueprint</a></span><span class="op">(</span></span>
+<span>  pages <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/utils/page.html" class="external-link">page</a></span><span class="op">(</span><span class="st">"cars.html"</span>, <span class="st">"cars"</span>, <span class="st">"Cars"</span>, <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span></span>
+<span>    rows <span class="op">=</span> <span class="fu"><a href="https://rdrr.io/r/base/unname.html" class="external-link">unname</a></span><span class="op">(</span><span class="fu">whisker</span><span class="fu">::</span><span class="fu"><a href="https://rdrr.io/pkg/whisker/man/rowSplit.html" class="external-link">rowSplit</a></span><span class="op">(</span><span class="va">car_data</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"model"</span>, <span class="st">"mpg"</span>, <span class="st">"cyl"</span>, <span class="st">"hp"</span>, <span class="st">"wt"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span><span class="op">)</span></span>
+<span>  <span class="op">)</span><span class="op">)</span>,</span>
+<span>  templates <span class="op">=</span> <span class="st">"templates/cars"</span>,</span>
+<span>  static <span class="op">=</span> <span class="st">"static/cars"</span></span>
+<span><span class="op">)</span></span></code></pre></div>
+<p><code><a href="../articles/flask-flow.html">vignette("flask-flow", package = "spigot")</a></code> explains this
+layout.</p>
 <div class="section level3">
 <h3 id="several-pages">Several pages<a class="anchor" aria-label="anchor" href="#several-pages"></a>
 </h3>
 <p><code>pages</code> is a named list keyed by path. A request for
 <code>/cars/</code> is redirected to <code>/cars</code>, and a path that
-is neither a page nor a file in <code>www/</code> gets a 404 page. Pages
-can also be nested (<code>"/docs/intro"</code>); see
-<code><a href="../reference/spigot_page.html">?spigot_page</a></code> for how their relative URLs resolve.</p>
+is neither a page nor a static file gets a 404 page. Pages can also be
+nested (<code>"/docs/intro"</code>); see <code><a href="../reference/spigot_page.html">?spigot_page</a></code> for
+how their relative URLs resolve.</p>
 <p>A top-level page can also be any Shiny UI, such as a
 <code>fluidPage()</code>, so a classic Shiny page can sit next to
 hand-written ones.</p>
@@ -522,45 +521,48 @@ never inject markup or R code, <code>{{#rows}} ... {{/rows}}</code>
 repeats for each element of a list, and <code>{{&gt; nav}}</code>
 inserts a partial. Here is the cars page, which R renders with all 32
 rows:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode html"><code class="sourceCode html"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="dt">&lt;!DOCTYPE</span> html<span class="dt">&gt;</span></span>
-<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">html</span><span class="ot"> lang</span><span class="op">=</span><span class="st">"en"</span><span class="dt">&gt;</span></span>
-<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>{{&gt; head}}</span>
-<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">body</span><span class="dt">&gt;</span></span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>  {{&gt; nav}}</span>
-<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">main</span><span class="dt">&gt;</span></span>
-<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>    <span class="dt">&lt;</span><span class="kw">h1</span><span class="dt">&gt;</span>Cars<span class="dt">&lt;/</span><span class="kw">h1</span><span class="dt">&gt;</span></span>
-<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>    <span class="dt">&lt;</span><span class="kw">form</span><span class="ot"> id</span><span class="op">=</span><span class="st">"filter"</span><span class="ot"> class</span><span class="op">=</span><span class="st">"row"</span><span class="dt">&gt;</span></span>
-<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">label</span><span class="dt">&gt;</span>Model contains <span class="dt">&lt;</span><span class="kw">input</span><span class="ot"> id</span><span class="op">=</span><span class="st">"q"</span><span class="ot"> autocomplete</span><span class="op">=</span><span class="st">"off"</span><span class="ot"> placeholder</span><span class="op">=</span><span class="st">"e.g. merc"</span><span class="dt">&gt;&lt;/</span><span class="kw">label</span><span class="dt">&gt;</span></span>
-<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">label</span><span class="dt">&gt;</span>At least <span class="dt">&lt;</span><span class="kw">input</span><span class="ot"> id</span><span class="op">=</span><span class="st">"min_mpg"</span><span class="ot"> inputmode</span><span class="op">=</span><span class="st">"decimal"</span><span class="ot"> size</span><span class="op">=</span><span class="st">"4"</span><span class="ot"> autocomplete</span><span class="op">=</span><span class="st">"off"</span><span class="dt">&gt;</span> mpg<span class="dt">&lt;/</span><span class="kw">label</span><span class="dt">&gt;</span></span>
-<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">button</span><span class="ot"> type</span><span class="op">=</span><span class="st">"submit"</span><span class="dt">&gt;</span>Filter<span class="dt">&lt;/</span><span class="kw">button</span><span class="dt">&gt;</span></span>
-<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">span</span><span class="ot"> class</span><span class="op">=</span><span class="st">"hint"</span><span class="ot"> id</span><span class="op">=</span><span class="st">"status"</span><span class="dt">&gt;&lt;/</span><span class="kw">span</span><span class="dt">&gt;</span></span>
-<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a>    <span class="dt">&lt;/</span><span class="kw">form</span><span class="dt">&gt;</span></span>
-<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a>    <span class="dt">&lt;</span><span class="kw">table</span><span class="ot"> id</span><span class="op">=</span><span class="st">"cars"</span><span class="dt">&gt;</span></span>
-<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">thead</span><span class="dt">&gt;</span></span>
-<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a>        <span class="dt">&lt;</span><span class="kw">tr</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Model<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>mpg<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Cylinders<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Horsepower<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Weight<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;/</span><span class="kw">tr</span><span class="dt">&gt;</span></span>
-<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a>      <span class="dt">&lt;/</span><span class="kw">thead</span><span class="dt">&gt;</span></span>
-<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">tbody</span><span class="dt">&gt;</span></span>
-<span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a>        {{#rows}}</span>
-<span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a>        <span class="dt">&lt;</span><span class="kw">tr</span><span class="ot"> data-car</span><span class="op">=</span><span class="st">"{{model}}"</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{model}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{mpg}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{cyl}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{hp}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{wt}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;/</span><span class="kw">tr</span><span class="dt">&gt;</span></span>
-<span id="cb13-21"><a href="#cb13-21" tabindex="-1"></a>        {{/rows}}</span>
-<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a>      <span class="dt">&lt;/</span><span class="kw">tbody</span><span class="dt">&gt;</span></span>
-<span id="cb13-23"><a href="#cb13-23" tabindex="-1"></a>    <span class="dt">&lt;/</span><span class="kw">table</span><span class="dt">&gt;</span></span>
-<span id="cb13-24"><a href="#cb13-24" tabindex="-1"></a>  <span class="dt">&lt;/</span><span class="kw">main</span><span class="dt">&gt;</span></span>
-<span id="cb13-25"><a href="#cb13-25" tabindex="-1"></a>  {{&gt; footer}}</span>
-<span id="cb13-26"><a href="#cb13-26" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">script</span><span class="ot"> src</span><span class="op">=</span><span class="st">"cars.js"</span><span class="dt">&gt;&lt;/</span><span class="kw">script</span><span class="dt">&gt;</span></span>
-<span id="cb13-27"><a href="#cb13-27" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">body</span><span class="dt">&gt;</span></span>
-<span id="cb13-28"><a href="#cb13-28" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">html</span><span class="dt">&gt;</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode html"><code class="sourceCode html"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="dt">&lt;!DOCTYPE</span> html<span class="dt">&gt;</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">html</span><span class="ot"> lang</span><span class="op">=</span><span class="st">"en"</span><span class="dt">&gt;</span></span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>{{&gt; head}}</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">body</span><span class="dt">&gt;</span></span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  {{&gt; nav}}</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">main</span><span class="dt">&gt;</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>    <span class="dt">&lt;</span><span class="kw">h1</span><span class="dt">&gt;</span>Cars<span class="dt">&lt;/</span><span class="kw">h1</span><span class="dt">&gt;</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>    <span class="dt">&lt;</span><span class="kw">form</span><span class="ot"> id</span><span class="op">=</span><span class="st">"filter"</span><span class="ot"> class</span><span class="op">=</span><span class="st">"row"</span><span class="dt">&gt;</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">label</span><span class="dt">&gt;</span>Model contains <span class="dt">&lt;</span><span class="kw">input</span><span class="ot"> id</span><span class="op">=</span><span class="st">"q"</span><span class="ot"> autocomplete</span><span class="op">=</span><span class="st">"off"</span><span class="ot"> placeholder</span><span class="op">=</span><span class="st">"e.g. merc"</span><span class="dt">&gt;&lt;/</span><span class="kw">label</span><span class="dt">&gt;</span></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">label</span><span class="dt">&gt;</span>At least <span class="dt">&lt;</span><span class="kw">input</span><span class="ot"> id</span><span class="op">=</span><span class="st">"min_mpg"</span><span class="ot"> inputmode</span><span class="op">=</span><span class="st">"decimal"</span><span class="ot"> size</span><span class="op">=</span><span class="st">"4"</span><span class="ot"> autocomplete</span><span class="op">=</span><span class="st">"off"</span><span class="dt">&gt;</span> mpg<span class="dt">&lt;/</span><span class="kw">label</span><span class="dt">&gt;</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">button</span><span class="ot"> type</span><span class="op">=</span><span class="st">"submit"</span><span class="dt">&gt;</span>Filter<span class="dt">&lt;/</span><span class="kw">button</span><span class="dt">&gt;</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">span</span><span class="ot"> class</span><span class="op">=</span><span class="st">"hint"</span><span class="ot"> id</span><span class="op">=</span><span class="st">"status"</span><span class="dt">&gt;&lt;/</span><span class="kw">span</span><span class="dt">&gt;</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a>    <span class="dt">&lt;/</span><span class="kw">form</span><span class="dt">&gt;</span></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a>    <span class="dt">&lt;</span><span class="kw">table</span><span class="ot"> id</span><span class="op">=</span><span class="st">"cars"</span><span class="dt">&gt;</span></span>
+<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">thead</span><span class="dt">&gt;</span></span>
+<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a>        <span class="dt">&lt;</span><span class="kw">tr</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Model<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>mpg<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Cylinders<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Horsepower<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;</span><span class="kw">th</span><span class="dt">&gt;</span>Weight<span class="dt">&lt;/</span><span class="kw">th</span><span class="dt">&gt;&lt;/</span><span class="kw">tr</span><span class="dt">&gt;</span></span>
+<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a>      <span class="dt">&lt;/</span><span class="kw">thead</span><span class="dt">&gt;</span></span>
+<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a>      <span class="dt">&lt;</span><span class="kw">tbody</span><span class="dt">&gt;</span></span>
+<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a>        {{#rows}}</span>
+<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a>        <span class="dt">&lt;</span><span class="kw">tr</span><span class="ot"> data-car</span><span class="op">=</span><span class="st">"{{model}}"</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{model}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{mpg}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{cyl}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{hp}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;</span><span class="kw">td</span><span class="dt">&gt;</span>{{wt}}<span class="dt">&lt;/</span><span class="kw">td</span><span class="dt">&gt;&lt;/</span><span class="kw">tr</span><span class="dt">&gt;</span></span>
+<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a>        {{/rows}}</span>
+<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a>      <span class="dt">&lt;/</span><span class="kw">tbody</span><span class="dt">&gt;</span></span>
+<span id="cb14-23"><a href="#cb14-23" tabindex="-1"></a>    <span class="dt">&lt;/</span><span class="kw">table</span><span class="dt">&gt;</span></span>
+<span id="cb14-24"><a href="#cb14-24" tabindex="-1"></a>  <span class="dt">&lt;/</span><span class="kw">main</span><span class="dt">&gt;</span></span>
+<span id="cb14-25"><a href="#cb14-25" tabindex="-1"></a>  {{&gt; footer}}</span>
+<span id="cb14-26"><a href="#cb14-26" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">script</span><span class="ot"> src</span><span class="op">=</span><span class="st">"{{static}}/cars.js"</span><span class="dt">&gt;&lt;/</span><span class="kw">script</span><span class="dt">&gt;</span></span>
+<span id="cb14-27"><a href="#cb14-27" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">body</span><span class="dt">&gt;</span></span>
+<span id="cb14-28"><a href="#cb14-28" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">html</span><span class="dt">&gt;</span></span></code></pre></div>
+<p>Its script is <code>&lt;script src="{{static}}/cars.js"&gt;</code>: a
+blueprint’s pages get <code>{{static}}</code>, the path its static files
+are served at (<code>cars/static</code>).</p>
 <p>All three pages share the <code>head</code>, <code>nav</code> and
-<code>footer</code> partials. The nav marks the current page with
-<code>aria-current</code>, using the <code>page</code> value each page’s
-data sets:</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode html"><code class="sourceCode html"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">nav</span><span class="ot"> class</span><span class="op">=</span><span class="st">"site-nav"</span><span class="dt">&gt;</span></span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">span</span><span class="ot"> class</span><span class="op">=</span><span class="st">"brand"</span><span class="dt">&gt;</span>spigot <span class="dt">&lt;</span><span class="kw">span</span><span class="dt">&gt;</span>site example<span class="dt">&lt;/</span><span class="kw">span</span><span class="dt">&gt;&lt;/</span><span class="kw">span</span><span class="dt">&gt;</span></span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="co">&lt;!-- Relative links: they keep working when the app runs under a subpath. --&gt;</span></span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"./"</span><span class="ot"> data-page</span><span class="op">=</span><span class="st">"home"</span><span class="er">{{</span><span class="ot">#page.home</span><span class="er">}}</span><span class="ot"> aria-current</span><span class="op">=</span><span class="st">"page"</span><span class="er">{{/</span><span class="ot">page.home</span><span class="er">}}</span><span class="dt">&gt;</span>Home<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"cars"</span><span class="ot"> data-page</span><span class="op">=</span><span class="st">"cars"</span><span class="er">{{</span><span class="ot">#page.cars</span><span class="er">}}</span><span class="ot"> aria-current</span><span class="op">=</span><span class="st">"page"</span><span class="er">{{/</span><span class="ot">page.cars</span><span class="er">}}</span><span class="dt">&gt;</span>Cars<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"model"</span><span class="ot"> data-page</span><span class="op">=</span><span class="st">"model"</span><span class="er">{{</span><span class="ot">#page.model</span><span class="er">}}</span><span class="ot"> aria-current</span><span class="op">=</span><span class="st">"page"</span><span class="er">{{/</span><span class="ot">page.model</span><span class="er">}}</span><span class="dt">&gt;</span>Model<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">nav</span><span class="dt">&gt;</span></span></code></pre></div>
+<code>footer</code> partials from <code>templates/partials/</code>. The
+nav marks the current page with <code>aria-current</code>, using the
+<code>page</code> value each page’s data sets:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode html"><code class="sourceCode html"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="dt">&lt;</span><span class="kw">nav</span><span class="ot"> class</span><span class="op">=</span><span class="st">"site-nav"</span><span class="dt">&gt;</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">span</span><span class="ot"> class</span><span class="op">=</span><span class="st">"brand"</span><span class="dt">&gt;</span>spigot <span class="dt">&lt;</span><span class="kw">span</span><span class="dt">&gt;</span>site example<span class="dt">&lt;/</span><span class="kw">span</span><span class="dt">&gt;&lt;/</span><span class="kw">span</span><span class="dt">&gt;</span></span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="co">&lt;!-- Relative links: they keep working when the app runs under a subpath. --&gt;</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"./"</span><span class="ot"> data-page</span><span class="op">=</span><span class="st">"home"</span><span class="er">{{</span><span class="ot">#page.home</span><span class="er">}}</span><span class="ot"> aria-current</span><span class="op">=</span><span class="st">"page"</span><span class="er">{{/</span><span class="ot">page.home</span><span class="er">}}</span><span class="dt">&gt;</span>Home<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"cars"</span><span class="ot"> data-page</span><span class="op">=</span><span class="st">"cars"</span><span class="er">{{</span><span class="ot">#page.cars</span><span class="er">}}</span><span class="ot"> aria-current</span><span class="op">=</span><span class="st">"page"</span><span class="er">{{/</span><span class="ot">page.cars</span><span class="er">}}</span><span class="dt">&gt;</span>Cars<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  <span class="dt">&lt;</span><span class="kw">a</span><span class="ot"> href</span><span class="op">=</span><span class="st">"model"</span><span class="ot"> data-page</span><span class="op">=</span><span class="st">"model"</span><span class="er">{{</span><span class="ot">#page.model</span><span class="er">}}</span><span class="ot"> aria-current</span><span class="op">=</span><span class="st">"page"</span><span class="er">{{/</span><span class="ot">page.model</span><span class="er">}}</span><span class="dt">&gt;</span>Model<span class="dt">&lt;/</span><span class="kw">a</span><span class="dt">&gt;</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="dt">&lt;/</span><span class="kw">nav</span><span class="dt">&gt;</span></span></code></pre></div>
 <p><code>data</code> can also be a function of the request, called for
 each request (for example, to read the query string). The site’s data
 never changes, so its pages use <code>cache = TRUE</code> and are
@@ -573,39 +575,39 @@ rendered once.</p>
 form then asks the API for the matching rows and redraws the table body,
 building elements with <code>textContent</code> rather than HTML
 strings:</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="co">// The table arrives rendered in R. Filtering asks the API for matching rows</span></span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="co">// and redraws the table body.</span></span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a></span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="kw">const</span> $ <span class="op">=</span> (id) <span class="kw">=&gt;</span> <span class="bu">document</span><span class="op">.</span><span class="fu">getElementById</span>(id)<span class="op">;</span></span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="kw">const</span> columns <span class="op">=</span> [<span class="st">"model"</span><span class="op">,</span> <span class="st">"mpg"</span><span class="op">,</span> <span class="st">"cyl"</span><span class="op">,</span> <span class="st">"hp"</span><span class="op">,</span> <span class="st">"wt"</span>]<span class="op">;</span></span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a></span>
-<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="kw">function</span> <span class="fu">draw</span>(rows) {</span>
-<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>  <span class="kw">const</span> body <span class="op">=</span> <span class="fu">$</span>(<span class="st">"cars"</span>)<span class="op">.</span><span class="at">tBodies</span>[<span class="dv">0</span>]<span class="op">;</span></span>
-<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  body<span class="op">.</span><span class="fu">replaceChildren</span>(<span class="op">...</span>rows<span class="op">.</span><span class="fu">map</span>((row) <span class="kw">=&gt;</span> {</span>
-<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>    <span class="kw">const</span> tr <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">"tr"</span>)<span class="op">;</span></span>
-<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>    tr<span class="op">.</span><span class="at">dataset</span><span class="op">.</span><span class="at">car</span> <span class="op">=</span> row<span class="op">.</span><span class="at">model</span><span class="op">;</span></span>
-<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a>    <span class="cf">for</span> (<span class="kw">const</span> col <span class="kw">of</span> columns) {</span>
-<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a>      <span class="kw">const</span> td <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">"td"</span>)<span class="op">;</span></span>
-<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a>      td<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> row[col]<span class="op">;</span></span>
-<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a>      tr<span class="op">.</span><span class="fu">append</span>(td)<span class="op">;</span></span>
-<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a>    }</span>
-<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a>    <span class="cf">return</span> tr<span class="op">;</span></span>
-<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a>  }))<span class="op">;</span></span>
-<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a>  <span class="fu">$</span>(<span class="st">"status"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`</span><span class="sc">${</span>rows<span class="op">.</span><span class="at">length</span><span class="sc">}</span><span class="vs"> of 32 cars`</span><span class="op">;</span></span>
-<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a>}</span>
-<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a></span>
-<span id="cb15-22"><a href="#cb15-22" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"filter"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"submit"</span><span class="op">,</span> <span class="kw">async</span> (e) <span class="kw">=&gt;</span> {</span>
-<span id="cb15-23"><a href="#cb15-23" tabindex="-1"></a>  e<span class="op">.</span><span class="fu">preventDefault</span>()<span class="op">;</span></span>
-<span id="cb15-24"><a href="#cb15-24" tabindex="-1"></a>  <span class="cf">try</span> {</span>
-<span id="cb15-25"><a href="#cb15-25" tabindex="-1"></a>    <span class="kw">const</span> reply <span class="op">=</span> <span class="cf">await</span> spigot<span class="op">.</span><span class="fu">get</span>(<span class="st">"cars"</span><span class="op">,</span> { <span class="dt">q</span><span class="op">:</span> <span class="fu">$</span>(<span class="st">"q"</span>)<span class="op">.</span><span class="at">value</span><span class="op">,</span> <span class="dt">min_mpg</span><span class="op">:</span> <span class="fu">$</span>(<span class="st">"min_mpg"</span>)<span class="op">.</span><span class="at">value</span> })<span class="op">;</span></span>
-<span id="cb15-26"><a href="#cb15-26" tabindex="-1"></a>    <span class="fu">draw</span>(reply<span class="op">.</span><span class="at">rows</span>)<span class="op">;</span></span>
-<span id="cb15-27"><a href="#cb15-27" tabindex="-1"></a>  } <span class="cf">catch</span> (err) {</span>
-<span id="cb15-28"><a href="#cb15-28" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span>(err <span class="kw">instanceof</span> spigot<span class="op">.</span><span class="at">SpigotError</span>)) <span class="cf">throw</span> err<span class="op">;</span></span>
-<span id="cb15-29"><a href="#cb15-29" tabindex="-1"></a>    <span class="fu">$</span>(<span class="st">"status"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`Error </span><span class="sc">${</span>err<span class="op">.</span><span class="at">status</span><span class="sc">}</span><span class="vs">: </span><span class="sc">${</span>err<span class="op">.</span><span class="at">message</span><span class="sc">}</span><span class="vs">`</span><span class="op">;</span></span>
-<span id="cb15-30"><a href="#cb15-30" tabindex="-1"></a>  }</span>
-<span id="cb15-31"><a href="#cb15-31" tabindex="-1"></a>})<span class="op">;</span></span>
-<span id="cb15-32"><a href="#cb15-32" tabindex="-1"></a></span>
-<span id="cb15-33"><a href="#cb15-33" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"status"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`</span><span class="sc">${</span><span class="fu">$</span>(<span class="st">"cars"</span>)<span class="op">.</span><span class="at">tBodies</span>[<span class="dv">0</span>]<span class="op">.</span><span class="at">rows</span><span class="op">.</span><span class="at">length</span><span class="sc">}</span><span class="vs"> cars`</span><span class="op">;</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode js"><code class="sourceCode javascript"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="co">// The table arrives rendered in R. Filtering asks the API for matching rows</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="co">// and redraws the table body.</span></span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a></span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="kw">const</span> $ <span class="op">=</span> (id) <span class="kw">=&gt;</span> <span class="bu">document</span><span class="op">.</span><span class="fu">getElementById</span>(id)<span class="op">;</span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="kw">const</span> columns <span class="op">=</span> [<span class="st">"model"</span><span class="op">,</span> <span class="st">"mpg"</span><span class="op">,</span> <span class="st">"cyl"</span><span class="op">,</span> <span class="st">"hp"</span><span class="op">,</span> <span class="st">"wt"</span>]<span class="op">;</span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="kw">function</span> <span class="fu">draw</span>(rows) {</span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>  <span class="kw">const</span> body <span class="op">=</span> <span class="fu">$</span>(<span class="st">"cars"</span>)<span class="op">.</span><span class="at">tBodies</span>[<span class="dv">0</span>]<span class="op">;</span></span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>  body<span class="op">.</span><span class="fu">replaceChildren</span>(<span class="op">...</span>rows<span class="op">.</span><span class="fu">map</span>((row) <span class="kw">=&gt;</span> {</span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a>    <span class="kw">const</span> tr <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">"tr"</span>)<span class="op">;</span></span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a>    tr<span class="op">.</span><span class="at">dataset</span><span class="op">.</span><span class="at">car</span> <span class="op">=</span> row<span class="op">.</span><span class="at">model</span><span class="op">;</span></span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a>    <span class="cf">for</span> (<span class="kw">const</span> col <span class="kw">of</span> columns) {</span>
+<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a>      <span class="kw">const</span> td <span class="op">=</span> <span class="bu">document</span><span class="op">.</span><span class="fu">createElement</span>(<span class="st">"td"</span>)<span class="op">;</span></span>
+<span id="cb16-14"><a href="#cb16-14" tabindex="-1"></a>      td<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> row[col]<span class="op">;</span></span>
+<span id="cb16-15"><a href="#cb16-15" tabindex="-1"></a>      tr<span class="op">.</span><span class="fu">append</span>(td)<span class="op">;</span></span>
+<span id="cb16-16"><a href="#cb16-16" tabindex="-1"></a>    }</span>
+<span id="cb16-17"><a href="#cb16-17" tabindex="-1"></a>    <span class="cf">return</span> tr<span class="op">;</span></span>
+<span id="cb16-18"><a href="#cb16-18" tabindex="-1"></a>  }))<span class="op">;</span></span>
+<span id="cb16-19"><a href="#cb16-19" tabindex="-1"></a>  <span class="fu">$</span>(<span class="st">"status"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`</span><span class="sc">${</span>rows<span class="op">.</span><span class="at">length</span><span class="sc">}</span><span class="vs"> of 32 cars`</span><span class="op">;</span></span>
+<span id="cb16-20"><a href="#cb16-20" tabindex="-1"></a>}</span>
+<span id="cb16-21"><a href="#cb16-21" tabindex="-1"></a></span>
+<span id="cb16-22"><a href="#cb16-22" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"filter"</span>)<span class="op">.</span><span class="fu">addEventListener</span>(<span class="st">"submit"</span><span class="op">,</span> <span class="kw">async</span> (e) <span class="kw">=&gt;</span> {</span>
+<span id="cb16-23"><a href="#cb16-23" tabindex="-1"></a>  e<span class="op">.</span><span class="fu">preventDefault</span>()<span class="op">;</span></span>
+<span id="cb16-24"><a href="#cb16-24" tabindex="-1"></a>  <span class="cf">try</span> {</span>
+<span id="cb16-25"><a href="#cb16-25" tabindex="-1"></a>    <span class="kw">const</span> reply <span class="op">=</span> <span class="cf">await</span> spigot<span class="op">.</span><span class="fu">get</span>(<span class="st">"cars"</span><span class="op">,</span> { <span class="dt">q</span><span class="op">:</span> <span class="fu">$</span>(<span class="st">"q"</span>)<span class="op">.</span><span class="at">value</span><span class="op">,</span> <span class="dt">min_mpg</span><span class="op">:</span> <span class="fu">$</span>(<span class="st">"min_mpg"</span>)<span class="op">.</span><span class="at">value</span> })<span class="op">;</span></span>
+<span id="cb16-26"><a href="#cb16-26" tabindex="-1"></a>    <span class="fu">draw</span>(reply<span class="op">.</span><span class="at">rows</span>)<span class="op">;</span></span>
+<span id="cb16-27"><a href="#cb16-27" tabindex="-1"></a>  } <span class="cf">catch</span> (err) {</span>
+<span id="cb16-28"><a href="#cb16-28" tabindex="-1"></a>    <span class="cf">if</span> (<span class="op">!</span>(err <span class="kw">instanceof</span> spigot<span class="op">.</span><span class="at">SpigotError</span>)) <span class="cf">throw</span> err<span class="op">;</span></span>
+<span id="cb16-29"><a href="#cb16-29" tabindex="-1"></a>    <span class="fu">$</span>(<span class="st">"status"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`Error </span><span class="sc">${</span>err<span class="op">.</span><span class="at">status</span><span class="sc">}</span><span class="vs">: </span><span class="sc">${</span>err<span class="op">.</span><span class="at">message</span><span class="sc">}</span><span class="vs">`</span><span class="op">;</span></span>
+<span id="cb16-30"><a href="#cb16-30" tabindex="-1"></a>  }</span>
+<span id="cb16-31"><a href="#cb16-31" tabindex="-1"></a>})<span class="op">;</span></span>
+<span id="cb16-32"><a href="#cb16-32" tabindex="-1"></a></span>
+<span id="cb16-33"><a href="#cb16-33" tabindex="-1"></a><span class="fu">$</span>(<span class="st">"status"</span>)<span class="op">.</span><span class="at">textContent</span> <span class="op">=</span> <span class="vs">`</span><span class="sc">${</span><span class="fu">$</span>(<span class="st">"cars"</span>)<span class="op">.</span><span class="at">tBodies</span>[<span class="dv">0</span>]<span class="op">.</span><span class="at">rows</span><span class="op">.</span><span class="at">length</span><span class="sc">}</span><span class="vs"> cars`</span><span class="op">;</span></span></code></pre></div>
 </div>
 <div class="section level3">
 <h3 id="slow-work-future_promise">Slow work: <code>future_promise()</code><a class="anchor" aria-label="anchor" href="#slow-work-future_promise"></a>
@@ -616,9 +618,10 @@ a second should not run in the app’s R process. An endpoint can return a
 promise instead, and spigot replies when it resolves. The fit endpoint
 hands its work to a <a href="https://future.futureverse.org/" class="external-link">future</a>
 worker with <code><a href="https://rstudio.github.io/promises/reference/future_promise.html" class="external-link">promises::future_promise()</a></code>:</p>
-<div class="sourceCode" id="cb16"><pre class="downlit sourceCode r">
-<code class="sourceCode R"><span><span class="co"># The site's API. `cars` and `predictors` are defined in app.R: spigot_app()</span></span>
-<span><span class="co"># evaluates this file in app.R's environment.</span></span>
+<div class="sourceCode" id="cb17"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span><span class="co"># The site's API. `car_data` and `predictors` are defined in R/data.R, which</span></span>
+<span><span class="co"># Shiny loads before app.R; spigot_app() evaluates this file in app.R's</span></span>
+<span><span class="co"># environment, which sees them.</span></span>
 <span></span>
 <span><span class="co">#* Cars whose model name contains `q` (ignoring case) and that do at least</span></span>
 <span><span class="co">#* `min_mpg` miles per gallon.</span></span>
@@ -626,9 +629,9 @@ worker with <code><a href="https://rstudio.github.io/promises/reference/future_p
 <span><span class="kw">function</span><span class="op">(</span><span class="va">q</span> <span class="op">=</span> <span class="st">""</span>, <span class="va">min_mpg</span> <span class="op">=</span> <span class="st">""</span><span class="op">)</span> <span class="op">{</span></span>
 <span>  <span class="va">min_mpg</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/warning.html" class="external-link">suppressWarnings</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/numeric.html" class="external-link">as.numeric</a></span><span class="op">(</span><span class="va">min_mpg</span><span class="op">)</span><span class="op">)</span></span>
 <span>  <span class="kw">if</span> <span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/length.html" class="external-link">length</a></span><span class="op">(</span><span class="va">min_mpg</span><span class="op">)</span> <span class="op">!=</span> <span class="fl">1</span> <span class="op">||</span> <span class="fu"><a href="https://rdrr.io/r/base/NA.html" class="external-link">is.na</a></span><span class="op">(</span><span class="va">min_mpg</span><span class="op">)</span><span class="op">)</span> <span class="va">min_mpg</span> <span class="op">&lt;-</span> <span class="op">-</span><span class="cn">Inf</span></span>
-<span>  <span class="va">keep</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="va">q</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="va">cars</span><span class="op">$</span><span class="va">model</span><span class="op">)</span>, fixed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;</span> <span class="va">cars</span><span class="op">$</span><span class="va">mpg</span> <span class="op">&gt;=</span> <span class="va">min_mpg</span></span>
+<span>  <span class="va">keep</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/grep.html" class="external-link">grepl</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="va">q</span><span class="op">)</span>, <span class="fu"><a href="https://rdrr.io/r/base/chartr.html" class="external-link">tolower</a></span><span class="op">(</span><span class="va">car_data</span><span class="op">$</span><span class="va">model</span><span class="op">)</span>, fixed <span class="op">=</span> <span class="cn">TRUE</span><span class="op">)</span> <span class="op">&amp;</span> <span class="va">car_data</span><span class="op">$</span><span class="va">mpg</span> <span class="op">&gt;=</span> <span class="va">min_mpg</span></span>
 <span>  <span class="co"># A data frame becomes an array of row objects.</span></span>
-<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>rows <span class="op">=</span> <span class="va">cars</span><span class="op">[</span><span class="va">keep</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"model"</span>, <span class="st">"mpg"</span>, <span class="st">"cyl"</span>, <span class="st">"hp"</span>, <span class="st">"wt"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
+<span>  <span class="fu"><a href="https://rdrr.io/r/base/list.html" class="external-link">list</a></span><span class="op">(</span>rows <span class="op">=</span> <span class="va">car_data</span><span class="op">[</span><span class="va">keep</span>, <span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"model"</span>, <span class="st">"mpg"</span>, <span class="st">"cyl"</span>, <span class="st">"hp"</span>, <span class="st">"wt"</span><span class="op">)</span><span class="op">]</span><span class="op">)</span></span>
 <span><span class="op">}</span></span>
 <span></span>
 <span><span class="co">#* Regress mpg on one predictor and bootstrap a 95% interval for the slope.</span></span>
@@ -647,7 +650,7 @@ worker with <code><a href="https://rstudio.github.io/promises/reference/future_p
 <span>  <span class="op">}</span></span>
 <span></span>
 <span>  <span class="co"># Only these values are sent to the worker.</span></span>
-<span>  <span class="va">data</span> <span class="op">&lt;-</span> <span class="va">cars</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mpg"</span>, <span class="va">x</span><span class="op">)</span><span class="op">]</span></span>
+<span>  <span class="va">data</span> <span class="op">&lt;-</span> <span class="va">car_data</span><span class="op">[</span><span class="fu"><a href="https://rdrr.io/r/base/c.html" class="external-link">c</a></span><span class="op">(</span><span class="st">"mpg"</span>, <span class="va">x</span><span class="op">)</span><span class="op">]</span></span>
 <span>  <span class="va">app_pid</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.getpid.html" class="external-link">Sys.getpid</a></span><span class="op">(</span><span class="op">)</span></span>
 <span>  <span class="fu">promises</span><span class="fu">::</span><span class="fu"><a href="https://rstudio.github.io/promises/reference/future_promise.html" class="external-link">future_promise</a></span><span class="op">(</span><span class="op">{</span></span>
 <span>    <span class="va">started</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/Sys.time.html" class="external-link">Sys.time</a></span><span class="op">(</span><span class="op">)</span></span>
