@@ -102,7 +102,8 @@ function(x = "wt") {
 
 Blueprints live in `R/` because Shiny loads every file there before it runs `app.R`, so
 `cars` exists by the time `spigot_app()` needs it, and functions defined in `R/` are
-available to the endpoints. spigot adds no loader of its own.
+available to the endpoints. spigot adds no loader of its own. The
+[Blueprints](blueprints.html) vignette covers them in full.
 
 ### Compared with Flask
 

@@ -3,7 +3,8 @@
 * Blueprints: `spigot_blueprint()` groups a section's pages, API, templates, partials
   and static files, and `spigot_app(blueprints = list("/cars" = cars))` serves its pages
   under `/cars`, its API under `/api/cars` and its static files at `/cars/static`, which
-  its pages see as `{{static}}`. `vignette("flask-flow")` shows the layout.
+  its pages see as `{{static}}`. `vignette("blueprints")` explains them and
+  `vignette("flask-flow")` shows the folder layout.
 * `spigot_app(templates =)` is a search path for template files, and
   `spigot_app(partials =)` gives every page shared partials: a folder (one partial per
   file) or a named list. A page's own partials win.

@@ -143,6 +143,35 @@ test_that("a blueprint's API file is read relative to root, in the blueprint's e
   expect_identical(jsonlite::fromJSON(resp_text(r))$fit, "from the blueprint's environment")
 })
 
+test_that("one blueprint can be mounted at more than one prefix", {
+  root <- local_tree(c("s/x.js" = "x"))
+  bp <- spigot_blueprint(doc("{{static}}"), static = "s",
+                         api = spigot_api() |> plumber::pr_get("/hello", function() list(msg = "hi")))
+  app <- spigot_app(pages = doc(), api = test_router(), root = root, require_session = FALSE,
+                    blueprints = list("/a" = bp, "/b/c" = bp))
+  expect_match(resp_text(app_get(app, "/a")), "a/static", fixed = TRUE)
+  expect_match(resp_text(app_get(app, "/b/c")), "b/c/static", fixed = TRUE)
+  for (path in c("/api/a/hello", "/api/b/c/hello")) {
+    expect_identical(jsonlite::fromJSON(resp_text(app_get(app, path))), list(msg = "hi"),
+                     info = path)
+  }
+  paths <- start_with_server(app, fake_server())$calls()[[1]]
+  expect_identical(paths[["/a/static"]], paths[["/b/c/static"]])
+})
+
+test_that("a blueprint page's own partials win over the blueprint's and the app's", {
+  bp <- spigot_blueprint(
+    list("/" = spigot_page("<html><head></head><body>{{> nav}}</body></html>",
+                           partials = list(nav = "<b>page nav</b>")),
+         "/other" = spigot_page("<html><head></head><body>{{> nav}}</body></html>")),
+    partials = list(nav = "<b>blueprint nav</b>")
+  )
+  app <- spigot_app(pages = doc(), api = test_router(), blueprints = list("/cars" = bp),
+                    partials = list(nav = "<b>app nav</b>"), require_session = FALSE)
+  expect_match(resp_text(app_get(app, "/cars")), "<b>page nav</b>", fixed = TRUE)
+  expect_match(resp_text(app_get(app, "/cars/other")), "<b>blueprint nav</b>", fixed = TRUE)
+})
+
 test_that("spigot_app() runs every page check on the blueprints' pages", {
   root <- local_tree(c("s/x.js" = "x"))
   nested_ui <- spigot_blueprint(list("/" = doc(), "/deep" = shiny::fluidPage("x")))

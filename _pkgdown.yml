@@ -40,5 +40,6 @@ articles:
       - why-spigot
       - getting-started
       - flask-flow
+      - blueprints
       - reactivity
       - client
