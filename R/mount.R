@@ -141,12 +141,22 @@ session_guard <- function(require_session = TRUE) {
   }
 }
 
-# Refuses requests whose Origin (or, without one, Referer) names another host
-# than the one the request was sent to. Browsers send Origin on same-origin
-# POST/PUT/DELETE and nothing on same-origin GET, so absent means allowed.
-# Behind a proxy that rewrites Host, X-Forwarded-Host also counts.
+# Refuses cross-origin requests. A browser's Sec-Fetch-Site, which pages
+# cannot set, decides when present: "same-origin" (or "none", typed into the
+# address bar) passes and anything else is refused. It needs no Host, so it
+# holds behind proxies that rewrite Host and set no X-Forwarded-Host.
+# Without it, the request is refused when its Origin (or, without one,
+# Referer) names another host than the one it was sent to. Browsers send
+# Origin on same-origin POST/PUT/DELETE and nothing on same-origin GET, so
+# absent means allowed. Behind a proxy that rewrites Host, X-Forwarded-Host
+# also counts.
 origin_guard <- function() {
   function(req) {
+    site <- req$HTTP_SEC_FETCH_SITE
+    if (!is.null(site)) {
+      if (tolower(site) %in% c("same-origin", "none")) return(NULL)
+      return(json_error(403L, "cross-origin request refused"))
+    }
     source <- req$HTTP_ORIGIN %||% req$HTTP_REFERER
     if (is.null(source)) return(NULL)
     if (same_origin(source, req)) NULL else json_error(403L, "cross-origin request refused")

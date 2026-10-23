@@ -33,9 +33,11 @@
 #' so only open pages of this app can call the API. The `hint` points at
 #' `require_session = FALSE`.
 #'
-#' API requests whose `Origin` header (or, without one, `Referer`) names
-#' another host than the request's `Host` (or `X-Forwarded-Host`) get a `403`
-#' JSON response, whatever `require_session` is.
+#' Cross-origin API requests get a `403` JSON response, whatever
+#' `require_session` is. When the browser sends `Sec-Fetch-Site`, as current
+#' browsers do, only `same-origin` and `none` pass. Otherwise a request is
+#' refused when its `Origin` header (or, without one, `Referer`) names
+#' another host than the request's `Host` (or `X-Forwarded-Host`).
 #'
 #' @section The browser client:
 #' Every page gets `spigot.js` (see [spigot_dependency()]), which defines

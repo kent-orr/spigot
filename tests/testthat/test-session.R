@@ -249,6 +249,23 @@ test_that("the origin check compares against Host or X-Forwarded-Host", {
   expect_identical(g(req(Host = "example.com", Origin = "not a url"))$status, 403L)
 })
 
+test_that("Sec-Fetch-Site decides when the browser sends it", {
+  g <- origin_guard()
+  req <- function(...) fake_req("GET", "/api/x", headers = list(...))
+  # Behind a proxy that rewrites Host and sets no X-Forwarded-Host, as nginx in
+  # front of Shiny Server does: the browser's own word is trusted.
+  expect_null(g(req(Host = "127.0.0.1:3838", `Sec-Fetch-Site` = "same-origin",
+                    Referer = "https://apps.example.com/dash/")))
+  expect_null(g(req(Host = "127.0.0.1:3838", `Sec-Fetch-Site` = "same-origin",
+                    Origin = "https://apps.example.com")))
+  expect_null(g(req(Host = "127.0.0.1:3838", `Sec-Fetch-Site` = "none")))
+  # Anything else is refused, even when Origin matches Host.
+  for (site in c("same-site", "cross-site", "bogus")) {
+    r <- g(req(Host = "example.com", `Sec-Fetch-Site` = site, Origin = "https://example.com"))
+    expect_identical(r$status, 403L, info = site)
+  }
+})
+
 test_that("a request without Host but with Origin is refused", {
   req <- fake_req("POST", "/api/x", headers = list(Origin = "http://127.0.0.1:1234"))
   rm("HTTP_HOST", envir = req)

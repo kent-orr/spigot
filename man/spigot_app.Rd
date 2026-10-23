@@ -100,9 +100,11 @@ get a \code{401} JSON response, \verb{\{"error": "session required", "hint": "..
 so only open pages of this app can call the API. The \code{hint} points at
 \code{require_session = FALSE}.
 
-API requests whose \code{Origin} header (or, without one, \code{Referer}) names
-another host than the request's \code{Host} (or \code{X-Forwarded-Host}) get a \code{403}
-JSON response, whatever \code{require_session} is.
+Cross-origin API requests get a \code{403} JSON response, whatever
+\code{require_session} is. When the browser sends \code{Sec-Fetch-Site}, as current
+browsers do, only \code{same-origin} and \code{none} pass. Otherwise a request is
+refused when its \code{Origin} header (or, without one, \code{Referer}) names
+another host than the request's \code{Host} (or \code{X-Forwarded-Host}).
 }
 
 \section{The browser client}{
