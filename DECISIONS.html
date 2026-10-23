@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -196,8 +196,19 @@
 <li>The source’s <code>scheme://authority</code> is compared, case-insensitively, with <code>Host</code> and with every entry of <code>X-Forwarded-Host</code> (comma-separated). <code>:80</code> is dropped for http and <code>:443</code> for https on both sides. <code>Origin: null</code>, userinfo (<code>user@host</code>), non-URLs, and a source with no <code>Host</code> to compare against → 403.</li>
 <li>Accepting <code>X-Forwarded-Host</code> does not weaken the guard. A cross-site page cannot set that header without a CORS preflight, and the API never answers a preflight with CORS headers. Likewise, a cross-site <code>fetch</code> cannot send <code>X-Spigot-Session</code> without a preflight. So with <code>require_session = TRUE</code> the session check alone already blocks CSRF, and the origin guard is defence in depth. With <code>require_session = FALSE</code> it is the only CSRF guard.</li>
 <li>
-<strong>Not verified here (no deployment on this machine):</strong> whether Shiny Server and Posit Connect keep <code>Host</code> or set <code>X-Forwarded-Host</code>. If a proxy rewrites <code>Host</code> and sets neither, every browser POST gets 403. Check this on a real deployment before M7. PLAN §7 Q6 (<code>allow_origins</code>) is the escape hatch.</li>
+<strong>Not verified here (no deployment on this machine):</strong> whether Shiny Server and Posit Connect keep <code>Host</code> or set <code>X-Forwarded-Host</code>. If a proxy rewrites <code>Host</code> and sets neither, every browser POST gets 403. Check this on a real deployment before M7. PLAN §7 Q6 (<code>allow_origins</code>) is the escape hatch. (Answered 2026-10-23, below: nginx in front of Shiny Server sets neither.)</li>
 <li>The origin check runs before the session check: a cross-origin request gets 403 even with a valid token.</li>
+</ul></div>
+<div class="section level2">
+<h2 id="id_2026-10-23--origin-guard-trusts-sec-fetch-site-first">2026-10-23 — origin guard trusts <code>Sec-Fetch-Site</code> first<a class="anchor" aria-label="anchor" href="#id_2026-10-23--origin-guard-trusts-sec-fetch-site-first"></a></h2>
+<ul><li>Seen on a real deployment, nginx in front of Shiny Server open source at a subpath: a page <code>GET</code> from Firefox, with <code>Referer: https://&lt;host&gt;/dashboard/app/</code> and <code>Sec-Fetch-Site: same-origin</code>, got 403. R saw a rewritten <code>Host</code> and no <code>X-Forwarded-Host</code>, so the <code>Referer</code> fallback refused every same-origin request, not only POSTs.</li>
+<li>
+<strong>Decision:</strong> when <code>Sec-Fetch-Site</code> is present it decides: <code>same-origin</code> or <code>none</code> pass, and anything else (<code>same-site</code>, <code>cross-site</code>, unknown) gets 403. Without it, the Origin/Referer vs Host rules above apply unchanged.</li>
+<li>Pages cannot set <code>Sec-Fetch-*</code> (forbidden header names), and it needs no <code>Host</code>, so it holds behind any proxy. Every current browser sends it (Chrome 76, Firefox 90, Safari 16.4). Non-browser clients can forge it, but they can forge <code>Origin</code> too, and CSRF is a browser problem.</li>
+<li>
+<code>same-site</code> is refused: a sibling subdomain is a different origin, which matches what the Host comparison already did.</li>
+<li>
+<code>allow_origins</code> (PLAN §7 Q6) is still not built. It is only needed for browsers without <code>Sec-Fetch-Site</code> behind such a proxy.</li>
 </ul></div>
 <div class="section level2">
 <h2 id="id_2026-10-15--m2-max_request_size-defaults-to-null-changes-plan-3">2026-10-15 — M2: <code>max_request_size</code> defaults to <code>NULL</code> (changes PLAN §3)<a class="anchor" aria-label="anchor" href="#id_2026-10-15--m2-max_request_size-defaults-to-null-changes-plan-3"></a></h2>

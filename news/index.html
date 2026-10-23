@@ -7,7 +7,7 @@
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -48,6 +48,10 @@
       <small>Source: <a href="https://github.com/kent-orr/spigot/blob/main/NEWS.md" class="external-link"><code>NEWS.md</code></a></small>
     </div>
 
+    <div class="section level2">
+<h2 class="pkg-version" data-toc-text="0.2.1" id="spigot-021">spigot 0.2.1<a class="anchor" aria-label="anchor" href="#spigot-021"></a></h2>
+<ul><li>The API’s origin check now follows the browser’s <code>Sec-Fetch-Site</code> header when it is sent: <code>same-origin</code> and <code>none</code> pass, anything else gets <code>403</code>. Behind a proxy that rewrites <code>Host</code> without setting <code>X-Forwarded-Host</code> (nginx in front of Shiny Server, for example), every same-origin request carrying a <code>Referer</code> used to get <code>403</code>. Requests without <code>Sec-Fetch-Site</code> are checked against <code>Host</code> as before.</li>
+</ul></div>
     <div class="section level2">
 <h2 class="pkg-version" data-toc-text="0.2.0" id="spigot-020">spigot 0.2.0<a class="anchor" aria-label="anchor" href="#spigot-020"></a></h2>
 <ul><li>Blueprints: <code><a href="../reference/spigot_blueprint.html">spigot_blueprint()</a></code> groups a section’s pages, API, templates, partials and static files, and <code>spigot_app(blueprints = list("/cars" = cars))</code> serves its pages under <code>/cars</code>, its API under <code>/api/cars</code> and its static files at <code>/cars/static</code>, which its pages see as <code>{{static}}</code>. <code><a href="../articles/blueprints.html">vignette("blueprints")</a></code> explains them and <code><a href="../articles/flask-flow.html">vignette("flask-flow")</a></code> shows the folder layout.</li>

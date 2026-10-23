@@ -13,7 +13,7 @@ for an app directory)."></head><body>
 
     <a class="navbar-brand me-2" href="../index.html">spigot</a>
 
-    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.0</small>
+    <small class="nav-text text-muted me-auto" data-bs-toggle="tooltip" data-bs-placement="bottom" title="">0.2.1</small>
 
 
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbar" aria-controls="navbar" aria-expanded="false" aria-label="Toggle navigation">
@@ -181,9 +181,11 @@ header, and spigot binds the request to that session; endpoints read it with
 get a <code>401</code> JSON response, <code>{"error": "session required", "hint": "..."}</code>,
 so only open pages of this app can call the API. The <code>hint</code> points at
 <code>require_session = FALSE</code>.</p>
-<p>API requests whose <code>Origin</code> header (or, without one, <code>Referer</code>) names
-another host than the request's <code>Host</code> (or <code>X-Forwarded-Host</code>) get a <code>403</code>
-JSON response, whatever <code>require_session</code> is.</p>
+<p>Cross-origin API requests get a <code>403</code> JSON response, whatever
+<code>require_session</code> is. When the browser sends <code>Sec-Fetch-Site</code>, as current
+browsers do, only <code>same-origin</code> and <code>none</code> pass. Otherwise a request is
+refused when its <code>Origin</code> header (or, without one, <code>Referer</code>) names
+another host than the request's <code>Host</code> (or <code>X-Forwarded-Host</code>).</p>
     </div>
     <div class="section level2">
     <h2 id="the-browser-client">The browser client<a class="anchor" aria-label="anchor" href="#the-browser-client"></a></h2>

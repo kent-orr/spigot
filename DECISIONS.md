@@ -278,9 +278,31 @@ warm-up iterations:
   Server and Posit Connect keep `Host` or set `X-Forwarded-Host`. If a
   proxy rewrites `Host` and sets neither, every browser POST gets 403.
   Check this on a real deployment before M7. PLAN §7 Q6
-  (`allow_origins`) is the escape hatch.
+  (`allow_origins`) is the escape hatch. (Answered 2026-10-23, below:
+  nginx in front of Shiny Server sets neither.)
 - The origin check runs before the session check: a cross-origin request
   gets 403 even with a valid token.
+
+## 2026-10-23 — origin guard trusts `Sec-Fetch-Site` first
+
+- Seen on a real deployment, nginx in front of Shiny Server open source
+  at a subpath: a page `GET` from Firefox, with
+  `Referer: https://<host>/dashboard/app/` and
+  `Sec-Fetch-Site: same-origin`, got 403. R saw a rewritten `Host` and
+  no `X-Forwarded-Host`, so the `Referer` fallback refused every
+  same-origin request, not only POSTs.
+- **Decision:** when `Sec-Fetch-Site` is present it decides:
+  `same-origin` or `none` pass, and anything else (`same-site`,
+  `cross-site`, unknown) gets 403. Without it, the Origin/Referer vs
+  Host rules above apply unchanged.
+- Pages cannot set `Sec-Fetch-*` (forbidden header names), and it needs
+  no `Host`, so it holds behind any proxy. Every current browser sends
+  it (Chrome 76, Firefox 90, Safari 16.4). Non-browser clients can forge
+  it, but they can forge `Origin` too, and CSRF is a browser problem.
+- `same-site` is refused: a sibling subdomain is a different origin,
+  which matches what the Host comparison already did.
+- `allow_origins` (PLAN §7 Q6) is still not built. It is only needed for
+  browsers without `Sec-Fetch-Site` behind such a proxy.
 
 ## 2026-10-15 — M2: `max_request_size` defaults to `NULL` (changes PLAN §3)
 

@@ -1,5 +1,15 @@
 # Changelog
 
+## spigot 0.2.1
+
+- The API’s origin check now follows the browser’s `Sec-Fetch-Site`
+  header when it is sent: `same-origin` and `none` pass, anything else
+  gets `403`. Behind a proxy that rewrites `Host` without setting
+  `X-Forwarded-Host` (nginx in front of Shiny Server, for example),
+  every same-origin request carrying a `Referer` used to get `403`.
+  Requests without `Sec-Fetch-Site` are checked against `Host` as
+  before.
+
 ## spigot 0.2.0
 
 - Blueprints:
